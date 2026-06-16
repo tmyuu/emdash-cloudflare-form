@@ -1,5 +1,275 @@
 import { env } from "cloudflare:workers";
+//#region src/i18n.ts
+/** Supported languages, in the order shown in the settings dropdown. */
+const LANGS = ["en", "ja"];
+function isLang(v) {
+	return v === "en" || v === "ja";
+}
+function normalizeLang(v) {
+	return isLang(v) ? v : "en";
+}
+const LOCALES = {
+	en: {
+		admin: {
+			languageOptionLabel: "English",
+			languageFieldLabel: "Language",
+			settingsTitle: "Contact Form Settings",
+			settingsIntro: "Blocks spam with Cloudflare Turnstile and sends branded HTML email via Cloudflare Email Sending (the send_email binding). The sending domain must already be onboarded to Email Sending.",
+			saveButton: "Save",
+			orgNameLabel: "Organization name",
+			orgNamePlaceholder: "Shown in the email header and footer",
+			logoUrlLabel: "Logo image URL",
+			logoUrlPlaceholder: "https://example.com/icon.png — PNG, absolute URL",
+			brandColorLabel: "Brand color",
+			brandColorPlaceholder: "#1675b9",
+			footerLabel: "Footer",
+			footerPlaceholder: "Address, tel, etc. — line breaks allowed",
+			siteUrlLabel: "Site URL",
+			siteUrlPlaceholder: "Shown as a link in the footer",
+			fromAddressLabel: "From address",
+			fromAddressPlaceholder: "Acme Inc. <noreply@example.com>",
+			toEmailsLabel: "Notification recipients",
+			toEmailsPlaceholder: "Comma or newline separated; multiple allowed",
+			bindingNameLabel: "send_email binding name",
+			turnstileSiteKeyLabel: "Turnstile site key",
+			turnstileSiteKeyPlaceholder: "Public key",
+			turnstileSecretLabel: "Turnstile secret key",
+			turnstileSecretPlaceholder: "Leave blank to keep the current value",
+			notifySubjectLabel: "Notification subject",
+			notifySubjectPlaceholder: "Supports {type} and {name} placeholders",
+			autoresponderLabel: "Send an auto-reply to the submitter",
+			autoresponderSubjectLabel: "Auto-reply subject",
+			templateLabel: "Email template",
+			templateBrandedOption: "Branded",
+			confirmMessageLabel: "Confirmation message",
+			confirmMessagePlaceholder: "Optional — shown after a successful submission",
+			fieldsLabel: "Field definitions",
+			fieldsPlaceholder: "JSON array — leave blank for the defaults",
+			toastSaved: "Settings saved.",
+			toastSaveFailed: "Failed to save.",
+			toastInvalidFrom: "From must be in the form name@domain or Name <name@domain>.",
+			toastInvalidFields: "Field definitions are not valid JSON.",
+			submissionsTitle: "Form Submissions",
+			colReceivedAt: "Received at",
+			colCategory: "Category",
+			colName: "Name",
+			colEmail: "Email"
+		},
+		email: {
+			htmlLang: "en",
+			autoFooterNote: "This email was sent automatically from the contact form.",
+			notifyHeading: "New inquiry",
+			autoreplyHeading: "Thank you for your inquiry",
+			inquiryContentLabel: "Message",
+			greeting: (name) => `Dear ${name},`,
+			notifySubLabel: (category, name) => name ? `${category} / ${name}` : category,
+			autoreplyBodyHtml: "Thank you for contacting us. We have received your inquiry with the details below. A member of our team will get back to you <strong>within 2 business days</strong>.",
+			autoreplyBodyText: [
+				"Thank you for contacting us.",
+				"We have received your inquiry with the details below. A member of our team will get back to you within 2 business days.",
+				""
+			],
+			notifyIntroText: "A new inquiry has been received.",
+			preheaderNew: "New inquiry",
+			preheaderReceived: "We have received your inquiry"
+		},
+		defaults: {
+			orgName: "Contact",
+			notifySubject: "[Inquiry] {type} / {name}",
+			autoresponderSubject: "We have received your inquiry",
+			categoryFallback: "Inquiry",
+			fields: [
+				{
+					name: "type",
+					label: "Inquiry type",
+					type: "select",
+					options: [
+						"Construction request / Quote",
+						"Careers",
+						"Partnership inquiry",
+						"Press / Media",
+						"Other"
+					]
+				},
+				{
+					name: "name",
+					label: "Name",
+					type: "text",
+					required: true
+				},
+				{
+					name: "kana",
+					label: "Name (phonetic)",
+					type: "text"
+				},
+				{
+					name: "company",
+					label: "Company / Organization",
+					type: "text"
+				},
+				{
+					name: "email",
+					label: "Email",
+					type: "email",
+					required: true
+				},
+				{
+					name: "tel",
+					label: "Phone",
+					type: "tel"
+				},
+				{
+					name: "message",
+					label: "Message",
+					type: "textarea",
+					required: true
+				}
+			]
+		}
+	},
+	ja: {
+		admin: {
+			languageOptionLabel: "日本語",
+			languageFieldLabel: "言語",
+			settingsTitle: "お問い合わせフォーム設定",
+			settingsIntro: "Cloudflare Turnstile でスパムを防ぎ、Cloudflare Email Sending（send_email バインディング）でブランドHTMLメールを通知します。送信ドメインは Email Sending に onboard 済みである必要があります。",
+			saveButton: "保存",
+			orgNameLabel: "組織名",
+			orgNamePlaceholder: "メールのヘッダ・フッタに表示されます",
+			logoUrlLabel: "ロゴ画像URL",
+			logoUrlPlaceholder: "https://example.com/icon.png ・PNG推奨・絶対URL",
+			brandColorLabel: "ブランドカラー",
+			brandColorPlaceholder: "#1675b9",
+			footerLabel: "フッタ",
+			footerPlaceholder: "住所・TEL など。改行できます",
+			siteUrlLabel: "サイトURL",
+			siteUrlPlaceholder: "フッタにリンクとして表示されます",
+			fromAddressLabel: "差出人 From",
+			fromAddressPlaceholder: "有限会社○○ <noreply@example.com>",
+			toEmailsLabel: "通知先メール",
+			toEmailsPlaceholder: "カンマまたは改行区切りで複数指定できます",
+			bindingNameLabel: "send_email バインディング名",
+			turnstileSiteKeyLabel: "Turnstile サイトキー",
+			turnstileSiteKeyPlaceholder: "公開キー",
+			turnstileSecretLabel: "Turnstile シークレットキー",
+			turnstileSecretPlaceholder: "空欄のままにすると現在の値を維持します",
+			notifySubjectLabel: "通知メール件名",
+			notifySubjectPlaceholder: "{type} {name} を差し込めます",
+			autoresponderLabel: "送信者へ自動返信を送る",
+			autoresponderSubjectLabel: "自動返信の件名",
+			templateLabel: "メールテンプレート",
+			templateBrandedOption: "Branded",
+			confirmMessageLabel: "送信完了メッセージ",
+			confirmMessagePlaceholder: "任意。送信成功後に表示されます",
+			fieldsLabel: "フィールド定義",
+			fieldsPlaceholder: "JSON配列。空欄で既定値を使用します",
+			toastSaved: "設定を保存しました",
+			toastSaveFailed: "保存に失敗しました",
+			toastInvalidFrom: "From は name@domain か Name <name@domain> 形式で入力してください",
+			toastInvalidFields: "フィールド定義が不正なJSONです",
+			submissionsTitle: "お問い合わせ送信履歴",
+			colReceivedAt: "受信日時",
+			colCategory: "種別",
+			colName: "お名前",
+			colEmail: "メール"
+		},
+		email: {
+			htmlLang: "ja",
+			autoFooterNote: "このメールはお問い合わせフォームから自動送信されています。",
+			notifyHeading: "新しいお問い合わせ",
+			autoreplyHeading: "お問い合わせありがとうございます",
+			inquiryContentLabel: "お問い合わせ内容",
+			greeting: (name) => `${name} 様`,
+			notifySubLabel: (category, name) => name ? `${category} ／ ${name} 様` : category,
+			autoreplyBodyHtml: "このたびはお問い合わせいただき、誠にありがとうございます。以下の内容で受け付けいたしました。担当者より<strong>2営業日以内</strong>にご返信いたします。",
+			autoreplyBodyText: [
+				"このたびはお問い合わせいただき、誠にありがとうございます。",
+				"以下の内容で受け付けいたしました。担当者より2営業日以内にご返信いたします。",
+				""
+			],
+			notifyIntroText: "新しいお問い合わせがありました。",
+			preheaderNew: "新しいお問い合わせ",
+			preheaderReceived: "お問い合わせを受け付けました"
+		},
+		defaults: {
+			orgName: "お問い合わせ",
+			notifySubject: "【お問い合わせ】{type} / {name} 様",
+			autoresponderSubject: "お問い合わせを受け付けました",
+			categoryFallback: "お問い合わせ",
+			fields: [
+				{
+					name: "type",
+					label: "お問い合わせ種別",
+					type: "select",
+					options: [
+						"施工のご依頼・お見積り",
+						"採用について",
+						"協力会社のご相談",
+						"取材・メディア",
+						"その他"
+					]
+				},
+				{
+					name: "name",
+					label: "お名前",
+					type: "text",
+					required: true
+				},
+				{
+					name: "kana",
+					label: "フリガナ",
+					type: "text"
+				},
+				{
+					name: "company",
+					label: "会社名・所属",
+					type: "text"
+				},
+				{
+					name: "email",
+					label: "メールアドレス",
+					type: "email",
+					required: true
+				},
+				{
+					name: "tel",
+					label: "電話番号",
+					type: "tel"
+				},
+				{
+					name: "message",
+					label: "お問い合わせ内容",
+					type: "textarea",
+					required: true
+				}
+			]
+		}
+	}
+};
+function getLocale(lang) {
+	return LOCALES[lang];
+}
+/** Returns a fresh copy of the default field set for the given language. */
+function defaultFields(lang) {
+	return LOCALES[lang].defaults.fields.map((f) => ({
+		...f,
+		options: f.options ? [...f.options] : void 0
+	}));
+}
+//#endregion
 //#region src/templates.ts
+/**
+* Branded HTML email templates for emdash-cloudflare-form.
+*
+* Templates are a registry keyed by id — add new entries to `TEMPLATES`
+* to offer more designs (selectable from the admin settings page via the
+* "Template" field). Each template renders both a notification (to the
+* site owner) and an auto-reply (to the submitter) from the same data,
+* so adding a form field automatically appears in the email.
+*
+* All human-readable strings come from the active locale (`src/i18n.ts`),
+* selected by the runtime "Language" setting — no text is hard-coded here.
+*/
 const SANS = "'Hiragino Sans','Hiragino Kaku Gothic ProN','Yu Gothic',Meiryo,'Segoe UI',sans-serif";
 function escapeHtml(s) {
 	return s.replace(/[&<>"']/g, (c) => ({
@@ -10,12 +280,13 @@ function escapeHtml(s) {
 		"'": "&#39;"
 	})[c]);
 }
-function shell(brand, preheader, inner) {
+function shell(lang, brand, preheader, inner) {
+	const loc = getLocale(lang);
 	const accent = brand.brandColor || "#1675b9";
 	const logo = brand.logoUrl ? `<img src="${escapeHtml(brand.logoUrl)}" width="34" height="34" alt="" style="display:inline-block;vertical-align:middle;border:0;border-radius:6px;background:#ffffff;" />` : "";
 	const footerLines = (brand.footer || "").split("\n").map((l) => escapeHtml(l)).join("<br>");
 	const siteLink = brand.siteUrl ? `<br><a href="${escapeHtml(brand.siteUrl)}" style="color:${accent};text-decoration:none;">${escapeHtml(brand.siteUrl.replace(/^https?:\/\//, ""))}</a>` : "";
-	return `<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+	return `<!doctype html><html lang="${escapeHtml(loc.email.htmlLang)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
 <body style="margin:0;padding:0;background:#f1f5f9;">
 <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:#f1f5f9;">${escapeHtml(preheader)}</div>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;padding:24px 0;">
@@ -26,7 +297,7 @@ ${logo}<span style="display:inline-block;vertical-align:middle;margin-left:${log
 </td></tr>
 ${inner}
 <tr><td style="padding:18px 28px;background:#f8fafc;border-top:1px solid #e2e8f0;color:#64748b;font-family:${SANS};font-size:12px;line-height:1.8;">
-${footerLines}${siteLink}<br>このメールはお問い合わせフォームから自動送信されています。
+${footerLines}${siteLink}<br>${escapeHtml(loc.email.autoFooterNote)}
 </td></tr>
 </table>
 </td></tr></table></body></html>`;
@@ -43,30 +314,31 @@ function messageBox(message) {
 }
 /** The default branded design. */
 const branded = (input) => {
+	const loc = getLocale(input.lang);
 	const accent = input.brand.brandColor || "#1675b9";
-	const sub = input.category ? `${escapeHtml(input.category)}${input.submitterName ? ` ／ ${escapeHtml(input.submitterName)} 様` : ""}` : "";
+	const sub = input.category ? escapeHtml(loc.email.notifySubLabel(input.category, input.submitterName ?? "")) : "";
 	let inner;
 	if (input.kind === "notify") inner = `<tr><td style="padding:28px;">
-<h1 style="margin:0 0 4px;font-family:${SANS};font-size:18px;color:#0f172a;">新しいお問い合わせ</h1>
+<h1 style="margin:0 0 4px;font-family:${SANS};font-size:18px;color:#0f172a;">${escapeHtml(loc.email.notifyHeading)}</h1>
 ${sub ? `<p style="margin:0 0 20px;font-family:${SANS};font-size:13px;color:#64748b;">${sub}</p>` : ""}
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e2e8f0;border-collapse:collapse;">${rowsHtml(input.brand, input.pairs)}</table>
-${input.message ? `<p style="margin:22px 0 6px;font-family:${SANS};font-size:13px;font-weight:bold;color:${accent};">お問い合わせ内容</p>${messageBox(input.message)}` : ""}
+${input.message ? `<p style="margin:22px 0 6px;font-family:${SANS};font-size:13px;font-weight:bold;color:${accent};">${escapeHtml(loc.email.inquiryContentLabel)}</p>${messageBox(input.message)}` : ""}
 </td></tr>`;
 	else inner = `<tr><td style="padding:28px;">
-<h1 style="margin:0 0 16px;font-family:${SANS};font-size:18px;color:#0f172a;">お問い合わせありがとうございます</h1>
-${input.submitterName ? `<p style="margin:0 0 14px;font-family:${SANS};font-size:14px;line-height:1.9;color:#1e293b;">${escapeHtml(input.submitterName)} 様</p>` : ""}
-<p style="margin:0 0 18px;font-family:${SANS};font-size:14px;line-height:1.9;color:#1e293b;">このたびはお問い合わせいただき、誠にありがとうございます。以下の内容で受け付けいたしました。担当者より<strong>2営業日以内</strong>にご返信いたします。</p>
-${input.message ? `<p style="margin:0 0 6px;font-family:${SANS};font-size:13px;font-weight:bold;color:${accent};">お問い合わせ内容</p>${messageBox(input.message)}` : ""}
+<h1 style="margin:0 0 16px;font-family:${SANS};font-size:18px;color:#0f172a;">${escapeHtml(loc.email.autoreplyHeading)}</h1>
+${input.submitterName ? `<p style="margin:0 0 14px;font-family:${SANS};font-size:14px;line-height:1.9;color:#1e293b;">${escapeHtml(loc.email.greeting(input.submitterName))}</p>` : ""}
+<p style="margin:0 0 18px;font-family:${SANS};font-size:14px;line-height:1.9;color:#1e293b;">${loc.email.autoreplyBodyHtml}</p>
+${input.message ? `<p style="margin:0 0 6px;font-family:${SANS};font-size:13px;font-weight:bold;color:${accent};">${escapeHtml(loc.email.inquiryContentLabel)}</p>${messageBox(input.message)}` : ""}
 </td></tr>`;
-	const pre = input.kind === "notify" ? `${input.category ?? ""} ${input.submitterName ?? ""}`.trim() || "新しいお問い合わせ" : "お問い合わせを受け付けました";
-	const html = shell(input.brand, pre, inner);
+	const pre = input.kind === "notify" ? `${input.category ?? ""} ${input.submitterName ?? ""}`.trim() || loc.email.preheaderNew : loc.email.preheaderReceived;
+	const html = shell(input.lang, input.brand, pre, inner);
 	const textLines = [];
 	if (input.kind === "autoreply") {
-		if (input.submitterName) textLines.push(`${input.submitterName} 様`, "");
-		textLines.push("このたびはお問い合わせいただき、誠にありがとうございます。", "以下の内容で受け付けいたしました。担当者より2営業日以内にご返信いたします。", "");
-	} else textLines.push("新しいお問い合わせがありました。", "");
+		if (input.submitterName) textLines.push(loc.email.greeting(input.submitterName), "");
+		textLines.push(...loc.email.autoreplyBodyText);
+	} else textLines.push(loc.email.notifyIntroText, "");
 	for (const p of input.pairs) if (p.value) textLines.push(`■ ${p.label}: ${p.value}`);
-	if (input.message) textLines.push("", "■ お問い合わせ内容:", input.message);
+	if (input.message) textLines.push("", `■ ${loc.email.inquiryContentLabel}:`, input.message);
 	textLines.push("", "--", input.brand.orgName);
 	return {
 		html,
@@ -83,6 +355,7 @@ const TURNSTILE_VERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/sit
 const DEFAULT_BINDING = "EMAIL";
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const K = {
+	language: "settings:language",
 	orgName: "settings:orgName",
 	logoUrl: "settings:logoUrl",
 	brandColor: "settings:brandColor",
@@ -100,61 +373,14 @@ const K = {
 	confirmMessage: "settings:confirmMessage",
 	fields: "settings:fields"
 };
-const DEFAULT_FIELDS = [
-	{
-		name: "type",
-		label: "お問い合わせ種別",
-		type: "select",
-		options: [
-			"施工のご依頼・お見積り",
-			"採用について",
-			"協力会社のご相談",
-			"取材・メディア",
-			"その他"
-		]
-	},
-	{
-		name: "name",
-		label: "お名前",
-		type: "text",
-		required: true
-	},
-	{
-		name: "kana",
-		label: "フリガナ",
-		type: "text"
-	},
-	{
-		name: "company",
-		label: "会社名・所属",
-		type: "text"
-	},
-	{
-		name: "email",
-		label: "メールアドレス",
-		type: "email",
-		required: true
-	},
-	{
-		name: "tel",
-		label: "電話番号",
-		type: "tel"
-	},
-	{
-		name: "message",
-		label: "お問い合わせ内容",
-		type: "textarea",
-		required: true
-	}
-];
-function parseFields(raw) {
-	if (!raw.trim()) return DEFAULT_FIELDS;
+function parseFields(raw, lang) {
+	if (!raw.trim()) return defaultFields(lang);
 	try {
 		const parsed = JSON.parse(raw);
-		if (!Array.isArray(parsed) || parsed.length === 0) return DEFAULT_FIELDS;
-		return parsed.every((f) => f && typeof f.name === "string" && typeof f.label === "string" && typeof f.type === "string") ? parsed : DEFAULT_FIELDS;
+		if (!Array.isArray(parsed) || parsed.length === 0) return defaultFields(lang);
+		return parsed.every((f) => f && typeof f.name === "string" && typeof f.label === "string" && typeof f.type === "string") ? parsed : defaultFields(lang);
 	} catch {
-		return DEFAULT_FIELDS;
+		return defaultFields(lang);
 	}
 }
 function clip(v, max) {
@@ -184,9 +410,12 @@ async function getStr(ctx, key, def = "") {
 	return typeof v === "string" && v.length > 0 ? v : def;
 }
 async function loadConfig(ctx) {
+	const lang = normalizeLang(await getStr(ctx, K.language, "en"));
+	const loc = getLocale(lang);
 	return {
+		lang,
 		brand: {
-			orgName: await getStr(ctx, K.orgName, "お問い合わせ"),
+			orgName: await getStr(ctx, K.orgName, loc.defaults.orgName),
 			logoUrl: await getStr(ctx, K.logoUrl),
 			brandColor: await getStr(ctx, K.brandColor, "#1675b9"),
 			footer: await getStr(ctx, K.footer),
@@ -198,11 +427,11 @@ async function loadConfig(ctx) {
 		turnstileSecret: await getStr(ctx, K.turnstileSecret),
 		turnstileSiteKey: await getStr(ctx, K.turnstileSiteKey),
 		autoresponder: await getStr(ctx, K.autoresponder) === "1",
-		notifySubject: await getStr(ctx, K.notifySubject, "【お問い合わせ】{type} / {name} 様"),
-		autoresponderSubject: await getStr(ctx, K.autoresponderSubject, "お問い合わせを受け付けました"),
+		notifySubject: await getStr(ctx, K.notifySubject, loc.defaults.notifySubject),
+		autoresponderSubject: await getStr(ctx, K.autoresponderSubject, loc.defaults.autoresponderSubject),
 		template: await getStr(ctx, K.template, "branded"),
 		confirmMessage: await getStr(ctx, K.confirmMessage),
-		fields: parseFields(await getStr(ctx, K.fields))
+		fields: parseFields(await getStr(ctx, K.fields), lang)
 	};
 }
 async function verifyTurnstile(secret, token, ip) {
@@ -229,6 +458,7 @@ function getHeader(req, name) {
 }
 async function handleSubmit(routeCtx, ctx) {
 	const cfg = await loadConfig(ctx);
+	const loc = getLocale(cfg.lang);
 	const from = parseFrom(cfg.from);
 	if (!cfg.turnstileSecret || !from || cfg.toEmails.length === 0) return {
 		ok: false,
@@ -284,11 +514,12 @@ async function handleSubmit(routeCtx, ctx) {
 	} catch (err) {
 		ctx.log.error("Failed to store submission", err);
 	}
-	const subjectTokens = (s) => s.replace(/\{type\}/g, category || "お問い合わせ").replace(/\{name\}/g, submitterName || "");
+	const subjectTokens = (s) => s.replace(/\{type\}/g, category || loc.defaults.categoryFallback).replace(/\{name\}/g, submitterName || "");
 	const binding = getBinding(cfg.bindingName);
 	try {
 		const mail = renderEmail(cfg.template, {
 			kind: "notify",
+			lang: cfg.lang,
 			brand: cfg.brand,
 			pairs,
 			message,
@@ -313,6 +544,7 @@ async function handleSubmit(routeCtx, ctx) {
 	if (cfg.autoresponder && submitterEmail) try {
 		const mail = renderEmail(cfg.template, {
 			kind: "autoreply",
+			lang: cfg.lang,
 			brand: cfg.brand,
 			pairs,
 			message,
@@ -338,6 +570,7 @@ async function handleSubmit(routeCtx, ctx) {
 async function handleConfig(_routeCtx, ctx) {
 	const cfg = await loadConfig(ctx);
 	return {
+		language: cfg.lang,
 		turnstileSiteKey: cfg.turnstileSiteKey,
 		confirmMessage: cfg.confirmMessage,
 		fields: cfg.fields
@@ -345,67 +578,82 @@ async function handleConfig(_routeCtx, ctx) {
 }
 async function buildSettingsPage(ctx) {
 	const cfg = await loadConfig(ctx);
+	const t = getLocale(cfg.lang).admin;
 	return { blocks: [
 		{
 			type: "header",
-			text: "お問い合わせフォーム設定"
+			text: t.settingsTitle
 		},
 		{
 			type: "section",
-			text: "Cloudflare Turnstile でスパムを防ぎ、Cloudflare Email Sending（send_email バインディング）でブランドHTMLメールを通知します。送信ドメインは Email Sending に onboard 済みである必要があります。"
+			text: t.settingsIntro
 		},
 		{
 			type: "form",
 			submit: {
-				label: "保存",
+				label: t.saveButton,
 				action_id: "save_settings"
 			},
 			fields: [
 				{
+					type: "select",
+					action_id: "language",
+					label: t.languageFieldLabel,
+					initial_value: cfg.lang,
+					options: LANGS.map((l) => ({
+						value: l,
+						label: getLocale(l).admin.languageOptionLabel
+					}))
+				},
+				{
 					type: "text_input",
 					action_id: "orgName",
-					label: "組織名（ヘッダ・フッタ表示）",
+					label: t.orgNameLabel,
+					placeholder: t.orgNamePlaceholder,
 					initial_value: cfg.brand.orgName
 				},
 				{
 					type: "text_input",
 					action_id: "logoUrl",
-					label: "ロゴ画像URL（PNG推奨・絶対URL）",
-					placeholder: "https://example.com/icon.png",
+					label: t.logoUrlLabel,
+					placeholder: t.logoUrlPlaceholder,
 					initial_value: cfg.brand.logoUrl ?? ""
 				},
 				{
 					type: "text_input",
 					action_id: "brandColor",
-					label: "ブランドカラー（hex）",
-					placeholder: "#1675b9",
+					label: t.brandColorLabel,
+					placeholder: t.brandColorPlaceholder,
 					initial_value: cfg.brand.brandColor
 				},
 				{
 					type: "text_input",
 					action_id: "footer",
-					label: "フッタ（住所・TEL等／改行可）",
+					label: t.footerLabel,
+					placeholder: t.footerPlaceholder,
 					multiline: true,
 					initial_value: cfg.brand.footer ?? ""
 				},
 				{
 					type: "text_input",
 					action_id: "siteUrl",
-					label: "サイトURL（フッタリンク）",
+					label: t.siteUrlLabel,
+					placeholder: t.siteUrlPlaceholder,
 					initial_value: cfg.brand.siteUrl ?? ""
 				},
 				{
 					type: "text_input",
 					action_id: "fromAddress",
-					label: "差出人 From（name@domain か Name <name@domain>）",
-					placeholder: "有限会社○○ <noreply@example.com>",
+					label: t.fromAddressLabel,
+					placeholder: t.fromAddressPlaceholder,
 					initial_value: cfg.from,
 					required: true
 				},
 				{
 					type: "text_input",
 					action_id: "toEmails",
-					label: "通知先メール（カンマ/改行区切りで複数可）",
+					label: t.toEmailsLabel,
+					placeholder: t.toEmailsPlaceholder,
 					multiline: true,
 					initial_value: cfg.toEmails.join("\n"),
 					required: true
@@ -413,60 +661,65 @@ async function buildSettingsPage(ctx) {
 				{
 					type: "text_input",
 					action_id: "bindingName",
-					label: "send_email バインディング名",
+					label: t.bindingNameLabel,
 					placeholder: DEFAULT_BINDING,
 					initial_value: cfg.bindingName === DEFAULT_BINDING ? "" : cfg.bindingName
 				},
 				{
 					type: "text_input",
 					action_id: "turnstileSiteKey",
-					label: "Turnstile サイトキー（公開）",
+					label: t.turnstileSiteKeyLabel,
+					placeholder: t.turnstileSiteKeyPlaceholder,
 					initial_value: cfg.turnstileSiteKey
 				},
 				{
 					type: "secret_input",
 					action_id: "turnstileSecret",
-					label: "Turnstile シークレットキー（空欄=変更なし）"
+					label: t.turnstileSecretLabel,
+					placeholder: t.turnstileSecretPlaceholder
 				},
 				{
 					type: "text_input",
 					action_id: "notifySubject",
-					label: "通知メール件名（{type}/{name} 使用可）",
+					label: t.notifySubjectLabel,
+					placeholder: t.notifySubjectPlaceholder,
 					initial_value: cfg.notifySubject
 				},
 				{
 					type: "toggle",
 					action_id: "autoresponder",
-					label: "送信者へ自動返信を送る",
+					label: t.autoresponderLabel,
 					initial_value: cfg.autoresponder
 				},
 				{
 					type: "text_input",
 					action_id: "autoresponderSubject",
-					label: "自動返信の件名",
+					label: t.autoresponderSubjectLabel,
 					initial_value: cfg.autoresponderSubject
 				},
 				{
 					type: "select",
 					action_id: "template",
-					label: "メールテンプレート",
+					label: t.templateLabel,
 					initial_value: cfg.template,
 					options: [{
 						value: "branded",
-						label: "Branded（標準）"
+						label: t.templateBrandedOption
 					}]
 				},
 				{
 					type: "text_input",
 					action_id: "confirmMessage",
-					label: "送信完了メッセージ（任意）",
+					label: t.confirmMessageLabel,
+					placeholder: t.confirmMessagePlaceholder,
 					multiline: true,
 					initial_value: cfg.confirmMessage
 				},
 				{
 					type: "text_input",
 					action_id: "fields",
-					label: "フィールド定義（JSON配列・空=既定）",
+					label: t.fieldsLabel,
+					placeholder: t.fieldsPlaceholder,
 					multiline: true,
 					initial_value: JSON.stringify(cfg.fields, null, 2)
 				}
@@ -475,6 +728,8 @@ async function buildSettingsPage(ctx) {
 	] };
 }
 async function saveSettings(ctx, values) {
+	if (typeof values.language === "string") await ctx.kv.set(K.language, normalizeLang(values.language));
+	const t = getLocale(normalizeLang(await getStr(ctx, K.language, "en"))).admin;
 	try {
 		const setStr = async (key, v) => {
 			const s = typeof v === "string" ? v.trim() : "";
@@ -484,7 +739,7 @@ async function saveSettings(ctx, values) {
 		if (typeof values.fromAddress === "string" && !parseFrom(values.fromAddress)) return {
 			...await buildSettingsPage(ctx),
 			toast: {
-				message: "From は name@domain か Name <name@domain> 形式で入力してください",
+				message: t.toastInvalidFrom,
 				type: "error"
 			}
 		};
@@ -495,7 +750,7 @@ async function saveSettings(ctx, values) {
 			return {
 				...await buildSettingsPage(ctx),
 				toast: {
-					message: "フィールド定義が不正なJSONです",
+					message: t.toastInvalidFields,
 					type: "error"
 				}
 			};
@@ -520,7 +775,7 @@ async function saveSettings(ctx, values) {
 		return {
 			...await buildSettingsPage(ctx),
 			toast: {
-				message: "設定を保存しました",
+				message: t.toastSaved,
 				type: "success"
 			}
 		};
@@ -529,13 +784,14 @@ async function saveSettings(ctx, values) {
 		return {
 			...await buildSettingsPage(ctx),
 			toast: {
-				message: "保存に失敗しました",
+				message: t.toastSaveFailed,
 				type: "error"
 			}
 		};
 	}
 }
 async function buildSubmissionsPage(ctx) {
+	const t = getLocale((await loadConfig(ctx)).lang).admin;
 	let rows = [];
 	try {
 		rows = ((await ctx.storage.submissions.query({
@@ -555,29 +811,29 @@ async function buildSubmissionsPage(ctx) {
 	}
 	return { blocks: [{
 		type: "header",
-		text: "お問い合わせ送信履歴"
+		text: t.submissionsTitle
 	}, {
 		type: "table",
 		blockId: "submissions-table",
 		columns: [
 			{
 				key: "createdAt",
-				label: "受信日時",
+				label: t.colReceivedAt,
 				format: "datetime"
 			},
 			{
 				key: "category",
-				label: "種別",
+				label: t.colCategory,
 				format: "text"
 			},
 			{
 				key: "name",
-				label: "お名前",
+				label: t.colName,
 				format: "text"
 			},
 			{
 				key: "email",
-				label: "メール",
+				label: t.colEmail,
 				format: "text"
 			}
 		],
