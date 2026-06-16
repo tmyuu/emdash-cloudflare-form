@@ -18,6 +18,10 @@ form-submission endpoint and sends its own branded notifications.
 - **Flexible fields** — define the form fields (name/label/type/required) from
   the admin UI as JSON. New fields automatically appear in the email.
 - **Submission storage** — every submission is saved and viewable in the admin.
+- **Bilingual (English / Japanese)** — a single **Language** setting switches
+  both the admin UI and the customer-facing output (default field labels,
+  email subjects, confirmation message, and the email template text). Defaults
+  to English; strings live in `src/i18n.ts`.
 - Delivery via the host Worker's `send_email` binding — no API keys.
 
 ## Requirements
@@ -63,6 +67,8 @@ export default defineConfig({
 
 Deploy, then open **EmDash admin → Contact Form**:
 
+- **Language** — `English` / `日本語`. Drives the admin UI and the
+  customer-facing output (default fields, subjects, confirmation, email text).
 - **Org name / Logo URL / Brand colour / Footer** — email branding.
 - **From Address** — `Your Co <noreply@yourdomain.com>` (onboarded domain).
 - **Notify recipients** — where submissions are sent (comma/newline separated).
@@ -83,8 +89,8 @@ Response: `{ "ok": true }` on success, or `{ "ok": false, "error": "..." }`
 (`turnstile_failed`, `required_fields`, `invalid_email`, `not_configured`,
 `send_failed`).
 
-The public form config (Turnstile site key, field definitions, confirmation
-message) is available at:
+The public form config (active `language`, Turnstile site key, field
+definitions, confirmation message) is available at:
 
 ```
 GET /_emdash/api/plugins/cf-form/config

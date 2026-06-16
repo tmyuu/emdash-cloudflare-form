@@ -7,19 +7,32 @@
  *                          the site owner + an auto-reply to the submitter,
  *                          all via the Cloudflare Email Sending binding.
  *   - `config`  (public) — expose the public form config (Turnstile site key,
- *                          field definitions, confirmation message) so the
- *                          site can render the form dynamically.
+ *                          field definitions, confirmation message, language)
+ *                          so the site can render the form dynamically.
  *   - `admin`            — Block Kit settings page + submissions list.
  *
  * Runtime config lives in the plugin KV (set on the settings page). The host
  * Worker must declare a `send_email` binding (default name `EMAIL`); the
  * plugin must run in-process (`plugins:`), not `sandboxed:`, so the binding
  * is in scope.
+ *
+ * All human-readable text comes from `src/i18n.ts`, selected by the runtime
+ * "Language" setting (default English) which drives both the admin UI and the
+ * customer-facing output.
  */
 
 import type { PluginContext, SandboxedPlugin, SandboxedRouteContext, SandboxedRequest } from "emdash/plugin";
 import { env as cfEnv } from "cloudflare:workers";
 import { renderEmail, type BrandConfig } from "./templates.js";
+import {
+  getLocale,
+  defaultFields,
+  normalizeLang,
+  DEFAULT_LANG,
+  LANGS,
+  type Lang,
+  type FieldDef,
+} from "./i18n.js";
 
 const TURNSTILE_VERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
 const DEFAULT_BINDING = "EMAIL";
@@ -27,6 +40,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 // --- KV keys -----------------------------------------------------------------
 const K = {
+  language: "settings:language",
   orgName: "settings:orgName",
   logoUrl: "settings:logoUrl",
   brandColor: "settings:brandColor",
@@ -45,37 +59,17 @@ const K = {
   fields: "settings:fields",
 } as const;
 
-// --- Field definitions -------------------------------------------------------
-type FieldType = "text" | "email" | "tel" | "textarea" | "select";
-interface FieldDef {
-  name: string;
-  label: string;
-  type: FieldType;
-  required?: boolean;
-  options?: string[];
-}
-
-const DEFAULT_FIELDS: FieldDef[] = [
-  { name: "type", label: "お問い合わせ種別", type: "select", options: ["施工のご依頼・お見積り", "採用について", "協力会社のご相談", "取材・メディア", "その他"] },
-  { name: "name", label: "お名前", type: "text", required: true },
-  { name: "kana", label: "フリガナ", type: "text" },
-  { name: "company", label: "会社名・所属", type: "text" },
-  { name: "email", label: "メールアドレス", type: "email", required: true },
-  { name: "tel", label: "電話番号", type: "tel" },
-  { name: "message", label: "お問い合わせ内容", type: "textarea", required: true },
-];
-
-function parseFields(raw: string): FieldDef[] {
-  if (!raw.trim()) return DEFAULT_FIELDS;
+function parseFields(raw: string, lang: Lang): FieldDef[] {
+  if (!raw.trim()) return defaultFields(lang);
   try {
     const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed) || parsed.length === 0) return DEFAULT_FIELDS;
+    if (!Array.isArray(parsed) || parsed.length === 0) return defaultFields(lang);
     const ok = parsed.every(
       (f) => f && typeof f.name === "string" && typeof f.label === "string" && typeof f.type === "string",
     );
-    return ok ? (parsed as FieldDef[]) : DEFAULT_FIELDS;
+    return ok ? (parsed as FieldDef[]) : defaultFields(lang);
   } catch {
-    return DEFAULT_FIELDS;
+    return defaultFields(lang);
   }
 }
 
@@ -126,6 +120,7 @@ async function getStr(ctx: PluginContext, key: string, def = ""): Promise<string
 }
 
 interface Config {
+  lang: Lang;
   brand: BrandConfig;
   from: string;
   bindingName: string;
@@ -141,9 +136,12 @@ interface Config {
 }
 
 async function loadConfig(ctx: PluginContext): Promise<Config> {
+  const lang = normalizeLang(await getStr(ctx, K.language, DEFAULT_LANG));
+  const loc = getLocale(lang);
   return {
+    lang,
     brand: {
-      orgName: await getStr(ctx, K.orgName, "お問い合わせ"),
+      orgName: await getStr(ctx, K.orgName, loc.defaults.orgName),
       logoUrl: await getStr(ctx, K.logoUrl),
       brandColor: await getStr(ctx, K.brandColor, "#1675b9"),
       footer: await getStr(ctx, K.footer),
@@ -155,11 +153,11 @@ async function loadConfig(ctx: PluginContext): Promise<Config> {
     turnstileSecret: await getStr(ctx, K.turnstileSecret),
     turnstileSiteKey: await getStr(ctx, K.turnstileSiteKey),
     autoresponder: (await getStr(ctx, K.autoresponder)) === "1",
-    notifySubject: await getStr(ctx, K.notifySubject, "【お問い合わせ】{type} / {name} 様"),
-    autoresponderSubject: await getStr(ctx, K.autoresponderSubject, "お問い合わせを受け付けました"),
+    notifySubject: await getStr(ctx, K.notifySubject, loc.defaults.notifySubject),
+    autoresponderSubject: await getStr(ctx, K.autoresponderSubject, loc.defaults.autoresponderSubject),
     template: await getStr(ctx, K.template, "branded"),
     confirmMessage: await getStr(ctx, K.confirmMessage),
-    fields: parseFields(await getStr(ctx, K.fields)),
+    fields: parseFields(await getStr(ctx, K.fields), lang),
   };
 }
 
@@ -183,8 +181,8 @@ async function verifyTurnstile(secret: string, token: string, ip?: string): Prom
   }
 }
 
-// headers は sandboxed では Record<string,string>、trusted(in-process)では
-// 実 Headers の場合がある。両対応で安全に読む。
+// `headers` is a plain Record<string,string> when sandboxed, but may be a real
+// Headers object in trusted (in-process) mode. Read safely for both.
 function getHeader(req: SandboxedRequest, name: string): string | undefined {
   const h = req.headers as unknown as { get?: (n: string) => string | null } & Record<string, string>;
   if (typeof h.get === "function") return h.get(name) ?? undefined;
@@ -193,6 +191,7 @@ function getHeader(req: SandboxedRequest, name: string): string | undefined {
 
 async function handleSubmit(routeCtx: SandboxedRouteContext, ctx: PluginContext) {
   const cfg = await loadConfig(ctx);
+  const loc = getLocale(cfg.lang);
   const from = parseFrom(cfg.from);
   if (!cfg.turnstileSecret || !from || cfg.toEmails.length === 0) {
     return { ok: false, error: "not_configured" };
@@ -245,13 +244,13 @@ async function handleSubmit(routeCtx: SandboxedRouteContext, ctx: PluginContext)
   }
 
   const subjectTokens = (s: string) =>
-    s.replace(/\{type\}/g, category || "お問い合わせ").replace(/\{name\}/g, submitterName || "");
+    s.replace(/\{type\}/g, category || loc.defaults.categoryFallback).replace(/\{name\}/g, submitterName || "");
 
   const binding = getBinding(cfg.bindingName);
 
   // notification to site owner(s) — required
   try {
-    const mail = renderEmail(cfg.template, { kind: "notify", brand: cfg.brand, pairs, message, submitterName, category });
+    const mail = renderEmail(cfg.template, { kind: "notify", lang: cfg.lang, brand: cfg.brand, pairs, message, submitterName, category });
     await binding.send({
       to: cfg.toEmails,
       from,
@@ -268,7 +267,7 @@ async function handleSubmit(routeCtx: SandboxedRouteContext, ctx: PluginContext)
   // auto-reply to submitter — best-effort
   if (cfg.autoresponder && submitterEmail) {
     try {
-      const mail = renderEmail(cfg.template, { kind: "autoreply", brand: cfg.brand, pairs, message, submitterName, category });
+      const mail = renderEmail(cfg.template, { kind: "autoreply", lang: cfg.lang, brand: cfg.brand, pairs, message, submitterName, category });
       await binding.send({
         to: submitterEmail,
         from,
@@ -289,6 +288,7 @@ async function handleSubmit(routeCtx: SandboxedRouteContext, ctx: PluginContext)
 async function handleConfig(_routeCtx: SandboxedRouteContext, ctx: PluginContext) {
   const cfg = await loadConfig(ctx);
   return {
+    language: cfg.lang,
     turnstileSiteKey: cfg.turnstileSiteKey,
     confirmMessage: cfg.confirmMessage,
     fields: cfg.fields,
@@ -298,33 +298,41 @@ async function handleConfig(_routeCtx: SandboxedRouteContext, ctx: PluginContext
 // --- admin (Block Kit) -------------------------------------------------------
 async function buildSettingsPage(ctx: PluginContext) {
   const cfg = await loadConfig(ctx);
+  const t = getLocale(cfg.lang).admin;
   return {
     blocks: [
-      { type: "header", text: "お問い合わせフォーム設定" },
+      { type: "header", text: t.settingsTitle },
       {
         type: "section",
-        text: "Cloudflare Turnstile でスパムを防ぎ、Cloudflare Email Sending（send_email バインディング）でブランドHTMLメールを通知します。送信ドメインは Email Sending に onboard 済みである必要があります。",
+        text: t.settingsIntro,
       },
       {
         type: "form",
-        submit: { label: "保存", action_id: "save_settings" },
+        submit: { label: t.saveButton, action_id: "save_settings" },
         fields: [
-          { type: "text_input", action_id: "orgName", label: "組織名（ヘッダ・フッタ表示）", initial_value: cfg.brand.orgName },
-          { type: "text_input", action_id: "logoUrl", label: "ロゴ画像URL（PNG推奨・絶対URL）", placeholder: "https://example.com/icon.png", initial_value: cfg.brand.logoUrl ?? "" },
-          { type: "text_input", action_id: "brandColor", label: "ブランドカラー（hex）", placeholder: "#1675b9", initial_value: cfg.brand.brandColor },
-          { type: "text_input", action_id: "footer", label: "フッタ（住所・TEL等／改行可）", multiline: true, initial_value: cfg.brand.footer ?? "" },
-          { type: "text_input", action_id: "siteUrl", label: "サイトURL（フッタリンク）", initial_value: cfg.brand.siteUrl ?? "" },
-          { type: "text_input", action_id: "fromAddress", label: "差出人 From（name@domain か Name <name@domain>）", placeholder: "有限会社○○ <noreply@example.com>", initial_value: cfg.from, required: true },
-          { type: "text_input", action_id: "toEmails", label: "通知先メール（カンマ/改行区切りで複数可）", multiline: true, initial_value: cfg.toEmails.join("\n"), required: true },
-          { type: "text_input", action_id: "bindingName", label: "send_email バインディング名", placeholder: DEFAULT_BINDING, initial_value: (cfg.bindingName === DEFAULT_BINDING ? "" : cfg.bindingName) },
-          { type: "text_input", action_id: "turnstileSiteKey", label: "Turnstile サイトキー（公開）", initial_value: cfg.turnstileSiteKey },
-          { type: "secret_input", action_id: "turnstileSecret", label: "Turnstile シークレットキー（空欄=変更なし）" },
-          { type: "text_input", action_id: "notifySubject", label: "通知メール件名（{type}/{name} 使用可）", initial_value: cfg.notifySubject },
-          { type: "toggle", action_id: "autoresponder", label: "送信者へ自動返信を送る", initial_value: cfg.autoresponder },
-          { type: "text_input", action_id: "autoresponderSubject", label: "自動返信の件名", initial_value: cfg.autoresponderSubject },
-          { type: "select", action_id: "template", label: "メールテンプレート", initial_value: cfg.template, options: [{ value: "branded", label: "Branded（標準）" }] },
-          { type: "text_input", action_id: "confirmMessage", label: "送信完了メッセージ（任意）", multiline: true, initial_value: cfg.confirmMessage },
-          { type: "text_input", action_id: "fields", label: "フィールド定義（JSON配列・空=既定）", multiline: true, initial_value: JSON.stringify(cfg.fields, null, 2) },
+          {
+            type: "select",
+            action_id: "language",
+            label: t.languageFieldLabel,
+            initial_value: cfg.lang,
+            options: LANGS.map((l) => ({ value: l, label: getLocale(l).admin.languageOptionLabel })),
+          },
+          { type: "text_input", action_id: "orgName", label: t.orgNameLabel, placeholder: t.orgNamePlaceholder, initial_value: cfg.brand.orgName },
+          { type: "text_input", action_id: "logoUrl", label: t.logoUrlLabel, placeholder: t.logoUrlPlaceholder, initial_value: cfg.brand.logoUrl ?? "" },
+          { type: "text_input", action_id: "brandColor", label: t.brandColorLabel, placeholder: t.brandColorPlaceholder, initial_value: cfg.brand.brandColor },
+          { type: "text_input", action_id: "footer", label: t.footerLabel, placeholder: t.footerPlaceholder, multiline: true, initial_value: cfg.brand.footer ?? "" },
+          { type: "text_input", action_id: "siteUrl", label: t.siteUrlLabel, placeholder: t.siteUrlPlaceholder, initial_value: cfg.brand.siteUrl ?? "" },
+          { type: "text_input", action_id: "fromAddress", label: t.fromAddressLabel, placeholder: t.fromAddressPlaceholder, initial_value: cfg.from, required: true },
+          { type: "text_input", action_id: "toEmails", label: t.toEmailsLabel, placeholder: t.toEmailsPlaceholder, multiline: true, initial_value: cfg.toEmails.join("\n"), required: true },
+          { type: "text_input", action_id: "bindingName", label: t.bindingNameLabel, placeholder: DEFAULT_BINDING, initial_value: (cfg.bindingName === DEFAULT_BINDING ? "" : cfg.bindingName) },
+          { type: "text_input", action_id: "turnstileSiteKey", label: t.turnstileSiteKeyLabel, placeholder: t.turnstileSiteKeyPlaceholder, initial_value: cfg.turnstileSiteKey },
+          { type: "secret_input", action_id: "turnstileSecret", label: t.turnstileSecretLabel, placeholder: t.turnstileSecretPlaceholder },
+          { type: "text_input", action_id: "notifySubject", label: t.notifySubjectLabel, placeholder: t.notifySubjectPlaceholder, initial_value: cfg.notifySubject },
+          { type: "toggle", action_id: "autoresponder", label: t.autoresponderLabel, initial_value: cfg.autoresponder },
+          { type: "text_input", action_id: "autoresponderSubject", label: t.autoresponderSubjectLabel, initial_value: cfg.autoresponderSubject },
+          { type: "select", action_id: "template", label: t.templateLabel, initial_value: cfg.template, options: [{ value: "branded", label: t.templateBrandedOption }] },
+          { type: "text_input", action_id: "confirmMessage", label: t.confirmMessageLabel, placeholder: t.confirmMessagePlaceholder, multiline: true, initial_value: cfg.confirmMessage },
+          { type: "text_input", action_id: "fields", label: t.fieldsLabel, placeholder: t.fieldsPlaceholder, multiline: true, initial_value: JSON.stringify(cfg.fields, null, 2) },
         ],
       },
     ],
@@ -332,6 +340,12 @@ async function buildSettingsPage(ctx: PluginContext) {
 }
 
 async function saveSettings(ctx: PluginContext, values: Record<string, unknown>) {
+  // Persist the language first so validation errors and the re-rendered page
+  // reflect the (possibly) newly selected language.
+  if (typeof values.language === "string") {
+    await ctx.kv.set(K.language, normalizeLang(values.language));
+  }
+  const t = getLocale(normalizeLang(await getStr(ctx, K.language, DEFAULT_LANG))).admin;
   try {
     const setStr = async (key: string, v: unknown) => {
       const s = typeof v === "string" ? v.trim() : "";
@@ -340,14 +354,14 @@ async function saveSettings(ctx: PluginContext, values: Record<string, unknown>)
     };
 
     if (typeof values.fromAddress === "string" && !parseFrom(values.fromAddress)) {
-      return { ...(await buildSettingsPage(ctx)), toast: { message: "From は name@domain か Name <name@domain> 形式で入力してください", type: "error" } };
+      return { ...(await buildSettingsPage(ctx)), toast: { message: t.toastInvalidFrom, type: "error" } };
     }
     if (typeof values.fields === "string" && values.fields.trim()) {
       try {
         const p = JSON.parse(values.fields);
         if (!Array.isArray(p)) throw new Error("not array");
       } catch {
-        return { ...(await buildSettingsPage(ctx)), toast: { message: "フィールド定義が不正なJSONです", type: "error" } };
+        return { ...(await buildSettingsPage(ctx)), toast: { message: t.toastInvalidFields, type: "error" } };
       }
     }
 
@@ -373,14 +387,16 @@ async function saveSettings(ctx: PluginContext, values: Record<string, unknown>)
       await ctx.kv.set(K.turnstileSecret, values.turnstileSecret.trim());
     }
 
-    return { ...(await buildSettingsPage(ctx)), toast: { message: "設定を保存しました", type: "success" } };
+    return { ...(await buildSettingsPage(ctx)), toast: { message: t.toastSaved, type: "success" } };
   } catch (err) {
     ctx.log.error("Failed to save contact form settings", err as Error);
-    return { ...(await buildSettingsPage(ctx)), toast: { message: "保存に失敗しました", type: "error" } };
+    return { ...(await buildSettingsPage(ctx)), toast: { message: t.toastSaveFailed, type: "error" } };
   }
 }
 
 async function buildSubmissionsPage(ctx: PluginContext) {
+  const cfg = await loadConfig(ctx);
+  const t = getLocale(cfg.lang).admin;
   let rows: Array<Record<string, unknown>> = [];
   try {
     const result = await ctx.storage.submissions!.query({ orderBy: { createdAt: "desc" }, limit: 100 });
@@ -398,15 +414,15 @@ async function buildSubmissionsPage(ctx: PluginContext) {
   }
   return {
     blocks: [
-      { type: "header", text: "お問い合わせ送信履歴" },
+      { type: "header", text: t.submissionsTitle },
       {
         type: "table",
         blockId: "submissions-table",
         columns: [
-          { key: "createdAt", label: "受信日時", format: "datetime" },
-          { key: "category", label: "種別", format: "text" },
-          { key: "name", label: "お名前", format: "text" },
-          { key: "email", label: "メール", format: "text" },
+          { key: "createdAt", label: t.colReceivedAt, format: "datetime" },
+          { key: "category", label: t.colCategory, format: "text" },
+          { key: "name", label: t.colName, format: "text" },
+          { key: "email", label: t.colEmail, format: "text" },
         ],
         rows,
       },
