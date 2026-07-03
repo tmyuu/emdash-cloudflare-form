@@ -93,9 +93,11 @@ function parseFrom(input: string): FromAddress | null {
   return name ? { email, name } : { email };
 }
 
+/** Cloudflare Email Sending の宛先型。複数宛先はオブジェクト形式のみ受け付ける */
+type EmailAddress = { email: string; name?: string };
 type SendEmailBinding = {
   send(message: {
-    to: string | string[];
+    to: string | EmailAddress | EmailAddress[];
     from: FromAddress | string;
     replyTo?: string;
     subject: string;
@@ -252,7 +254,9 @@ async function handleSubmit(routeCtx: SandboxedRouteContext, ctx: PluginContext)
   try {
     const mail = renderEmail(cfg.template, { kind: "notify", lang: cfg.lang, brand: cfg.brand, pairs, message, submitterName, category });
     await binding.send({
-      to: cfg.toEmails,
+      // Email Sending binding は複数宛先を EmailAddress（{ email, name? }）配列で要求する。
+      // 文字列配列だと "Incorrect type for the 'name' field on 'EmailAddress'" で失敗する
+      to: cfg.toEmails.map((email) => ({ email })),
       from,
       replyTo: submitterEmail || undefined,
       subject: subjectTokens(cfg.notifySubject),
