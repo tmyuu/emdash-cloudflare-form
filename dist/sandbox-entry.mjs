@@ -43,6 +43,7 @@ const LOCALES = {
 			autoresponderSubjectLabel: "Auto-reply subject",
 			templateLabel: "Email template",
 			templateBrandedOption: "Branded",
+			templateElegantOption: "Elegant (serif headings, hairline rules)",
 			confirmMessageLabel: "Confirmation message",
 			confirmMessagePlaceholder: "Optional — shown after a successful submission",
 			fieldsLabel: "Field definitions",
@@ -166,6 +167,7 @@ const LOCALES = {
 			autoresponderSubjectLabel: "自動返信の件名",
 			templateLabel: "メールテンプレート",
 			templateBrandedOption: "Branded",
+			templateElegantOption: "Elegant（明朝見出し・罫線基調）",
 			confirmMessageLabel: "送信完了メッセージ",
 			confirmMessagePlaceholder: "任意。送信成功後に表示されます",
 			fieldsLabel: "フィールド定義",
@@ -337,7 +339,14 @@ ${input.submitterName ? `<p style="margin:0 0 14px;font-family:${font};font-size
 ${input.message ? `<p style="margin:0 0 6px;font-family:${font};font-size:13px;font-weight:bold;color:${accent};">${escapeHtml(loc.email.inquiryContentLabel)}</p>${messageBox(font, input.message)}` : ""}
 </td></tr>`;
 	const pre = input.kind === "notify" ? `${input.category ?? ""} ${input.submitterName ?? ""}`.trim() || loc.email.preheaderNew : loc.email.preheaderReceived;
-	const html = shell(input.lang, input.brand, pre, inner);
+	return {
+		html: shell(input.lang, input.brand, pre, inner),
+		text: plainText(input)
+	};
+};
+/** Plain-text body shared by all templates (text/plain alternative part). */
+function plainText(input) {
+	const loc = getLocale(input.lang);
 	const textLines = [];
 	if (input.kind === "autoreply") {
 		if (input.submitterName) textLines.push(loc.email.greeting(input.submitterName), "");
@@ -346,12 +355,80 @@ ${input.message ? `<p style="margin:0 0 6px;font-family:${font};font-size:13px;f
 	for (const p of input.pairs) if (p.value) textLines.push(`■ ${p.label}: ${p.value}`);
 	if (input.message) textLines.push("", `■ ${loc.email.inquiryContentLabel}:`, input.message);
 	textLines.push("", "--", input.brand.orgName);
+	return textLines.join("\n");
+}
+/**
+* Serif stack for elegant headings. Email clients only use installed fonts,
+* so this leads with the common JP mincho faces and falls back to Western
+* serifs.
+*/
+const ELEGANT_SERIF = "'Hiragino Mincho ProN','Yu Mincho','Times New Roman',Georgia,serif";
+function elegantShell(lang, brand, preheader, inner) {
+	const loc = getLocale(lang);
+	const accent = brand.brandColor || "#1675b9";
+	const font = fontOf(brand);
+	const logo = brand.logoUrl ? `<img src="${escapeHtml(brand.logoUrl)}" width="30" height="30" alt="" style="display:inline-block;vertical-align:middle;border:0;background:#ffffff;" />` : "";
+	const footerLines = (brand.footer || "").split("\n").map((l) => escapeHtml(l)).join("<br>");
+	const siteLink = brand.siteUrl ? `<br><a href="${escapeHtml(brand.siteUrl)}" style="color:${accent};text-decoration:none;">${escapeHtml(brand.siteUrl.replace(/^https?:\/\//, ""))}</a>` : "";
+	return `<!doctype html><html lang="${escapeHtml(loc.email.htmlLang)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f6f6f4;">
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:#f6f6f4;">${escapeHtml(preheader)}</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f6f6f4;padding:32px 0;">
+<tr><td align="center">
+<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:600px;max-width:600px;background:#ffffff;border:1px solid #e4e4e0;">
+<tr><td style="padding:26px 32px 20px;border-bottom:1px solid ${accent};">
+${logo}<span style="display:inline-block;vertical-align:middle;margin-left:${logo ? "12px" : "0"};color:#111111;font-family:${ELEGANT_SERIF};font-size:17px;">${escapeHtml(brand.orgName)}</span>
+</td></tr>
+${inner}
+<tr><td style="padding:20px 32px 24px;border-top:1px solid #e4e4e0;color:#8a8a86;font-family:${font};font-size:12px;line-height:1.9;">
+${footerLines}${siteLink}<br>${escapeHtml(loc.email.autoFooterNote)}
+</td></tr>
+</table>
+</td></tr></table></body></html>`;
+}
+function elegantRows(brand, pairs) {
+	const accent = brand.brandColor || "#1675b9";
+	const font = fontOf(brand);
+	return pairs.filter((p) => p.value).map((p) => `<tr>
+<td style="padding:12px 16px 12px 0;color:${accent};font-family:${font};font-size:12px;font-weight:bold;white-space:nowrap;vertical-align:top;border-bottom:1px solid #e8e8e4;">${escapeHtml(p.label)}</td>
+<td style="padding:12px 0;color:#222222;font-family:${font};font-size:14px;line-height:1.8;border-bottom:1px solid #e8e8e4;word-break:break-all;">${escapeHtml(p.value)}</td>
+</tr>`).join("");
+}
+function elegantMessage(brand, message) {
+	return `<div style="border-left:2px solid ${brand.brandColor || "#1675b9"};background:#fafaf8;padding:14px 18px;font-family:${fontOf(brand)};font-size:14px;line-height:1.9;color:#222222;white-space:pre-wrap;">${escapeHtml(message)}</div>`;
+}
+/**
+* Elegant design (#13): serif headings, 1px rules instead of fills, sharp
+* edges. All colour derives from `brandColor`, so it stays site-agnostic.
+*/
+const elegant = (input) => {
+	const loc = getLocale(input.lang);
+	const accent = input.brand.brandColor || "#1675b9";
+	const font = fontOf(input.brand);
+	const sub = input.category ? escapeHtml(loc.email.notifySubLabel(input.category, input.submitterName ?? "")) : "";
+	let inner;
+	if (input.kind === "notify") inner = `<tr><td style="padding:30px 32px;">
+<h1 style="margin:0 0 6px;font-family:${ELEGANT_SERIF};font-size:20px;font-weight:normal;color:#111111;">${escapeHtml(loc.email.notifyHeading)}</h1>
+${sub ? `<p style="margin:0 0 22px;font-family:${font};font-size:13px;color:#777772;">${sub}</p>` : ""}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;border-top:1px solid #e8e8e4;">${elegantRows(input.brand, input.pairs)}</table>
+${input.message ? `<p style="margin:24px 0 8px;font-family:${font};font-size:12px;font-weight:bold;color:${accent};">${escapeHtml(loc.email.inquiryContentLabel)}</p>${elegantMessage(input.brand, input.message)}` : ""}
+</td></tr>`;
+	else inner = `<tr><td style="padding:30px 32px;">
+<h1 style="margin:0 0 18px;font-family:${ELEGANT_SERIF};font-size:20px;font-weight:normal;color:#111111;">${escapeHtml(loc.email.autoreplyHeading)}</h1>
+${input.submitterName ? `<p style="margin:0 0 14px;font-family:${font};font-size:14px;line-height:1.9;color:#222222;">${escapeHtml(loc.email.greeting(input.submitterName))}</p>` : ""}
+<p style="margin:0 0 20px;font-family:${font};font-size:14px;line-height:1.9;color:#222222;">${loc.email.autoreplyBodyHtml}</p>
+${input.message ? `<p style="margin:0 0 8px;font-family:${font};font-size:12px;font-weight:bold;color:${accent};">${escapeHtml(loc.email.inquiryContentLabel)}</p>${elegantMessage(input.brand, input.message)}` : ""}
+</td></tr>`;
+	const pre = input.kind === "notify" ? `${input.category ?? ""} ${input.submitterName ?? ""}`.trim() || loc.email.preheaderNew : loc.email.preheaderReceived;
 	return {
-		html,
-		text: textLines.join("\n")
+		html: elegantShell(input.lang, input.brand, pre, inner),
+		text: plainText(input)
 	};
 };
-const TEMPLATES = { branded };
+const TEMPLATES = {
+	branded,
+	elegant
+};
 function renderEmail(templateId, input) {
 	return (templateId && TEMPLATES[templateId] || branded)(input);
 }
@@ -733,6 +810,9 @@ async function buildSettingsPage(ctx) {
 					options: [{
 						value: "branded",
 						label: t.templateBrandedOption
+					}, {
+						value: "elegant",
+						label: t.templateElegantOption
 					}]
 				},
 				{
