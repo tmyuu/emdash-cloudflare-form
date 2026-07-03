@@ -77,6 +77,7 @@ export interface AdminMessages {
   templateLabel: string;
   templateBrandedOption: string;
   templateEditorialOption: string;
+  templateElegantOption: string;
   confirmMessageLabel: string;
   confirmMessagePlaceholder: string;
   fieldsLabel: string;
@@ -177,6 +178,7 @@ const en: Locale = {
     templateLabel: "Email template",
     templateBrandedOption: "Branded",
     templateEditorialOption: "Editorial (whitespace, hairline rules)",
+    templateElegantOption: "Elegant (serif & hairline rules)",
     confirmMessageLabel: "Confirmation message",
     confirmMessagePlaceholder: "Optional — shown after a successful submission",
     fieldsLabel: "Field definitions",
@@ -279,6 +281,7 @@ const ja: Locale = {
     templateLabel: "メールテンプレート",
     templateBrandedOption: "Branded",
     templateEditorialOption: "Editorial（余白・ヘアライン基調）",
+    templateElegantOption: "Elegant（明朝・罫線基調）",
     confirmMessageLabel: "送信完了メッセージ",
     confirmMessagePlaceholder: "任意。送信成功後に表示されます",
     fieldsLabel: "フィールド定義",

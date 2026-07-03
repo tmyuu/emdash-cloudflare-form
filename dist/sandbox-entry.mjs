@@ -44,6 +44,7 @@ const LOCALES = {
 			templateLabel: "Email template",
 			templateBrandedOption: "Branded",
 			templateEditorialOption: "Editorial (whitespace, hairline rules)",
+			templateElegantOption: "Elegant (serif & hairline rules)",
 			confirmMessageLabel: "Confirmation message",
 			confirmMessagePlaceholder: "Optional — shown after a successful submission",
 			fieldsLabel: "Field definitions",
@@ -168,6 +169,7 @@ const LOCALES = {
 			templateLabel: "メールテンプレート",
 			templateBrandedOption: "Branded",
 			templateEditorialOption: "Editorial（余白・ヘアライン基調）",
+			templateElegantOption: "Elegant（明朝・罫線基調）",
 			confirmMessageLabel: "送信完了メッセージ",
 			confirmMessagePlaceholder: "任意。送信成功後に表示されます",
 			fieldsLabel: "フィールド定義",
@@ -434,9 +436,79 @@ ${input.message ? `<div style="margin-top:26px;border-top:1px solid ${HAIRLINE};
 		text: plainText(input)
 	};
 };
+/**
+* Serif page heading + hairline rules. No filled bands or cells, no colour
+* accents on structure — labels are quiet grey, rules are light grey, and
+* the brand colour appears only on the footer site link. Sharp corners
+* (no border-radius). Suited to quiet corporate sites where `branded`
+* feels too "SaaS".
+*/
+const SERIF = "'Hiragino Mincho ProN','Yu Mincho','Noto Serif JP',Georgia,serif";
+const elegant = (input) => {
+	const loc = getLocale(input.lang);
+	const accent = input.brand.brandColor || "#1675b9";
+	const font = fontOf(input.brand);
+	const brand = input.brand;
+	const logo = brand.logoUrl ? `<img src="${escapeHtml(brand.logoUrl)}" width="28" height="28" alt="" style="display:inline-block;vertical-align:middle;border:0;" />` : "";
+	const footerLines = (brand.footer ?? "").split("\n").map((l) => escapeHtml(l)).join("<br>");
+	const siteLink = brand.siteUrl ? `${brand.footer ? "<br>" : ""}<a href="${escapeHtml(brand.siteUrl)}" style="color:${accent};text-decoration:none;">${escapeHtml(brand.siteUrl.replace(/^https?:\/\//, ""))}</a>` : "";
+	const rows = input.pairs.filter((p) => p.value).map((p) => `<tr>
+<td style="padding:14px 20px 14px 0;color:#64748b;font-family:${font};font-size:11px;font-weight:bold;letter-spacing:.08em;white-space:nowrap;vertical-align:top;border-bottom:1px solid #f1f5f9;">${escapeHtml(p.label)}</td>
+<td style="padding:14px 0;color:#1e293b;font-family:${font};font-size:14px;line-height:1.8;border-bottom:1px solid #f1f5f9;word-break:break-all;">${escapeHtml(p.value)}</td>
+</tr>`).join("");
+	const infoBox = (message) => `<div style="background:#f8fafc;border:1px solid #f1f5f9;padding:16px 18px;font-family:${font};font-size:14px;line-height:1.9;color:#1e293b;white-space:pre-wrap;">${escapeHtml(message)}</div>`;
+	const heading = (text) => `<h1 style="margin:0 0 6px;font-family:${SERIF};font-size:20px;font-weight:bold;letter-spacing:.04em;line-height:1.5;color:#0f172a;">${escapeHtml(text)}</h1>`;
+	const sub = input.category ? escapeHtml(loc.email.notifySubLabel(input.category, input.submitterName ?? "")) : "";
+	let inner;
+	if (input.kind === "notify") inner = `<tr><td style="padding:32px;">
+${heading(loc.email.notifyHeading)}
+${sub ? `<p style="margin:0 0 24px;font-family:${font};font-size:12px;letter-spacing:.04em;color:#64748b;">${sub}</p>` : `<div style="height:18px;line-height:18px;">&nbsp;</div>`}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;border-top:1px solid #e2e8f0;">${rows}</table>
+${input.message ? `<p style="margin:26px 0 8px;font-family:${font};font-size:11px;font-weight:bold;letter-spacing:.08em;color:#64748b;">${escapeHtml(loc.email.inquiryContentLabel)}</p>${infoBox(input.message)}` : ""}
+</td></tr>`;
+	else inner = `<tr><td style="padding:32px;">
+${heading(loc.email.autoreplyHeading)}
+<div style="height:12px;line-height:12px;">&nbsp;</div>
+${input.submitterName ? `<p style="margin:0 0 14px;font-family:${font};font-size:14px;line-height:1.9;color:#1e293b;">${escapeHtml(loc.email.greeting(input.submitterName))}</p>` : ""}
+<p style="margin:0 0 22px;font-family:${font};font-size:14px;line-height:1.9;color:#1e293b;">${loc.email.autoreplyBodyHtml}</p>
+${input.message ? `<p style="margin:0 0 8px;font-family:${font};font-size:11px;font-weight:bold;letter-spacing:.08em;color:#64748b;">${escapeHtml(loc.email.inquiryContentLabel)}</p>${infoBox(input.message)}` : ""}
+</td></tr>`;
+	const pre = input.kind === "notify" ? `${input.category ?? ""} ${input.submitterName ?? ""}`.trim() || loc.email.preheaderNew : loc.email.preheaderReceived;
+	const html = `<!doctype html>
+<html lang="${input.lang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f8fafc;">
+<div style="display:none;max-height:0;overflow:hidden;">${escapeHtml(pre)}</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;padding:32px 12px;">
+<tr><td align="center">
+<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:600px;max-width:600px;background:#ffffff;border:1px solid #e2e8f0;">
+<tr><td style="padding:22px 32px;border-bottom:1px solid #e2e8f0;">
+${logo}<span style="display:inline-block;vertical-align:middle;margin-left:${logo ? "10px" : "0"};color:#0f172a;font-family:${font};font-size:14px;font-weight:bold;letter-spacing:.06em;">${escapeHtml(brand.orgName)}</span>
+</td></tr>
+${inner}
+<tr><td style="padding:20px 32px;border-top:1px solid #e2e8f0;color:#64748b;font-family:${font};font-size:11px;line-height:1.9;letter-spacing:.02em;">
+${footerLines}${siteLink}<br>${escapeHtml(loc.email.autoFooterNote)}
+</td></tr>
+</table>
+</td></tr>
+</table>
+</body></html>`;
+	const textLines = [];
+	if (input.kind === "autoreply") {
+		if (input.submitterName) textLines.push(loc.email.greeting(input.submitterName), "");
+		textLines.push(...loc.email.autoreplyBodyText);
+	} else textLines.push(loc.email.notifyIntroText, "");
+	for (const p of input.pairs) if (p.value) textLines.push(`■ ${p.label}: ${p.value}`);
+	if (input.message) textLines.push("", `■ ${loc.email.inquiryContentLabel}:`, input.message);
+	textLines.push("", "--", input.brand.orgName);
+	return {
+		html,
+		text: textLines.join("\n")
+	};
+};
 const TEMPLATES = {
 	branded,
-	editorial
+	editorial,
+	elegant
 };
 function renderEmail(templateId, input) {
 	return (templateId && TEMPLATES[templateId] || branded)(input);
@@ -816,13 +888,20 @@ async function buildSettingsPage(ctx) {
 					action_id: "template",
 					label: t.templateLabel,
 					initial_value: cfg.template,
-					options: [{
-						value: "branded",
-						label: t.templateBrandedOption
-					}, {
-						value: "editorial",
-						label: t.templateEditorialOption
-					}]
+					options: [
+						{
+							value: "branded",
+							label: t.templateBrandedOption
+						},
+						{
+							value: "editorial",
+							label: t.templateEditorialOption
+						},
+						{
+							value: "elegant",
+							label: t.templateElegantOption
+						}
+					]
 				},
 				{
 					type: "text_input",

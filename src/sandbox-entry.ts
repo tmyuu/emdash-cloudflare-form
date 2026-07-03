@@ -358,7 +358,7 @@ async function buildSettingsPage(ctx: PluginContext) {
           { type: "text_input", action_id: "notifySubject", label: t.notifySubjectLabel, placeholder: t.notifySubjectPlaceholder, initial_value: cfg.notifySubject },
           { type: "toggle", action_id: "autoresponder", label: t.autoresponderLabel, initial_value: cfg.autoresponder },
           { type: "text_input", action_id: "autoresponderSubject", label: t.autoresponderSubjectLabel, initial_value: cfg.autoresponderSubject },
-          { type: "select", action_id: "template", label: t.templateLabel, initial_value: cfg.template, options: [{ value: "branded", label: t.templateBrandedOption }, { value: "editorial", label: t.templateEditorialOption }] },
+          { type: "select", action_id: "template", label: t.templateLabel, initial_value: cfg.template, options: [{ value: "branded", label: t.templateBrandedOption }, { value: "editorial", label: t.templateEditorialOption }, { value: "elegant", label: t.templateElegantOption }] },
           { type: "text_input", action_id: "confirmMessage", label: t.confirmMessageLabel, placeholder: t.confirmMessagePlaceholder, multiline: true, initial_value: cfg.confirmMessage },
           { type: "text_input", action_id: "fields", label: t.fieldsLabel, placeholder: t.fieldsPlaceholder, multiline: true, initial_value: JSON.stringify(cfg.fields, null, 2) },
         ],
