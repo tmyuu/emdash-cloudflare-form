@@ -2,7 +2,7 @@
 function cloudflareForm() {
 	return {
 		id: "cf-form",
-		version: "0.3.0",
+		version: "0.6.0",
 		format: "standard",
 		entrypoint: "emdash-cloudflare-form/sandbox",
 		adminPages: [{

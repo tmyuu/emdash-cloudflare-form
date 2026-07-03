@@ -1,11 +1,13 @@
 /**
  * Branded HTML email templates for emdash-cloudflare-form.
  *
- * Templates are a registry keyed by id — add new entries to `TEMPLATES`
- * to offer more designs (selectable from the admin settings page via the
- * "Template" field). Each template renders both a notification (to the
- * site owner) and an auto-reply (to the submitter) from the same data,
- * so adding a form field automatically appears in the email.
+ * Two rendering paths:
+ *
+ *   - `branded` (default) — the built-in design below.
+ *   - custom — an admin-authored HTML (and optional plain-text) template
+ *     stored in settings and rendered by the small mustache-style engine at
+ *     the bottom of this file. This is how sites design their own emails;
+ *     see the README for the variable reference.
  *
  * All human-readable strings come from the active locale (`src/i18n.ts`),
  * selected by the runtime "Language" setting — no text is hard-coded here.
@@ -42,6 +44,8 @@ export interface RenderInput {
   brand: BrandConfig;
   /** Field label/value pairs in display order. */
   pairs: Array<{ label: string; value: string }>;
+  /** Submitted values keyed by field name (for `{{field.<name>}}` tokens). */
+  values?: Record<string, string>;
   /** Long-form body (e.g. the message field), rendered in its own box. */
   message?: string;
   /** Submitter display name (for the auto-reply greeting). */
@@ -149,13 +153,17 @@ ${input.submitterName ? `<p style="margin:0 0 14px;font-family:${font};font-size
 ${input.message ? `<p style="margin:0 0 6px;font-family:${font};font-size:13px;font-weight:bold;color:${accent};">${escapeHtml(loc.email.inquiryContentLabel)}</p>${messageBox(font, input.message)}` : ""}
 </td></tr>`;
   }
-  const pre =
-    input.kind === "notify"
-      ? `${input.category ?? ""} ${input.submitterName ?? ""}`.trim() || loc.email.preheaderNew
-      : loc.email.preheaderReceived;
+  const pre = preheaderOf(input);
   const html = shell(input.lang, input.brand, pre, inner);
   return { html, text: plainText(input) };
 };
+
+function preheaderOf(input: RenderInput): string {
+  const loc = getLocale(input.lang);
+  return input.kind === "notify"
+    ? `${input.category ?? ""} ${input.submitterName ?? ""}`.trim() || loc.email.preheaderNew
+    : loc.email.preheaderReceived;
+}
 
 /** Plain-text body shared by all templates (text/plain alternative part). */
 function plainText(input: RenderInput): string {
@@ -173,226 +181,165 @@ function plainText(input: RenderInput): string {
   return textLines.join("\n");
 }
 
-// --- editorial: hairline rules, whitespace, dot accent (#13) ------------------
+// --- custom template (admin-authored) -----------------------------------------
 //
-// Follows the lineage of an editorial-minimal site: sans type (the fontFamily
-// setting), neutral hairlines only (never the accent colour as a rule), no
-// boxes or fills around text, sharp edges. The accent colour appears in
-// exactly two places — a small status dot in the kicker and the footer link —
-// so it stays site-agnostic while reading as a deliberate accent.
+// A minimal mustache-style engine so sites can design their own email HTML
+// from the settings page without touching plugin code:
+//
+//   {{name}}            variable, HTML-escaped (plain in the text template)
+//   {{{name}}}          variable, raw (for prebuilt HTML parts)
+//   {{#key}}...{{/key}} loop over an array (e.g. pairs) or render-if-truthy
+//   {{^key}}...{{/key}} render-if-falsy
+//
+// Rendering is single-pass over the template source: substituted values are
+// never re-scanned, so submitted form data containing `{{...}}` is inert.
+// Limitation (documented): a section cannot nest another section of the
+// same key.
 
-const HAIRLINE = "#e5e5e5";
-const INK = "#1a1a1a";
-const MUTED = "#8a8a8a";
+type TemplateScope = Record<string, unknown>;
 
-/** Kicker line: small accent dot + muted label (the site's eyebrow pattern). */
-function editorialKicker(accent: string, font: string, label: string): string {
-  return `<p style="margin:0 0 14px;font-family:${font};font-size:11px;color:${MUTED};">
-<span style="display:inline-block;width:6px;height:6px;border-radius:6px;background:${accent};vertical-align:middle;margin-right:8px;"></span><span style="vertical-align:middle;">${escapeHtml(label)}</span>
-</p>`;
+export interface CustomTemplate {
+  html: string;
+  /** Optional plain-text template; blank = the default text rendering. */
+  text?: string;
 }
 
-function editorialShell(lang: Lang, brand: BrandConfig, preheader: string, inner: string): string {
-  const loc = getLocale(lang);
-  const accent = brand.brandColor || "#1675b9";
-  const font = fontOf(brand);
-  const logo = brand.logoUrl
-    ? `<img src="${escapeHtml(brand.logoUrl)}" width="24" height="24" alt="" style="display:inline-block;vertical-align:middle;border:0;background:#ffffff;" />`
-    : "";
-  const footerLines = (brand.footer || "")
-    .split("\n")
-    .map((l) => escapeHtml(l))
-    .join("<br>");
-  const siteLink = brand.siteUrl
-    ? `<br><a href="${escapeHtml(brand.siteUrl)}" style="color:${accent};text-decoration:none;">${escapeHtml(
-        brand.siteUrl.replace(/^https?:\/\//, ""),
-      )}</a>`
-    : "";
-  return `<!doctype html><html lang="${escapeHtml(loc.email.htmlLang)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="margin:0;padding:0;background:#fafafa;">
-<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:#fafafa;">${escapeHtml(preheader)}</div>
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#fafafa;padding:32px 0;">
-<tr><td align="center">
-<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:600px;max-width:600px;background:#ffffff;border:1px solid ${HAIRLINE};">
-<tr><td style="padding:22px 36px;border-bottom:1px solid ${HAIRLINE};">
-${logo}<span style="display:inline-block;vertical-align:middle;margin-left:${logo ? "10px" : "0"};color:#111111;font-family:${font};font-size:15px;font-weight:bold;">${escapeHtml(brand.orgName)}</span>
-</td></tr>
-${inner}
-<tr><td style="padding:22px 36px 28px;border-top:1px solid ${HAIRLINE};color:${MUTED};font-family:${font};font-size:12px;line-height:1.9;">
-${footerLines}${siteLink}<br>${escapeHtml(loc.email.autoFooterNote)}
-</td></tr>
-</table>
-</td></tr></table></body></html>`;
-}
-
-/** Definition-list rows: muted labels, neutral hairlines, no cell fills. */
-function editorialRows(brand: BrandConfig, pairs: RenderInput["pairs"]): string {
-  const font = fontOf(brand);
-  return pairs
-    .filter((p) => p.value)
-    .map(
-      (p) => `<tr>
-<td style="padding:14px 24px 14px 0;color:${MUTED};font-family:${font};font-size:12px;white-space:nowrap;vertical-align:top;border-bottom:1px solid ${HAIRLINE};">${escapeHtml(p.label)}</td>
-<td style="padding:14px 0;color:${INK};font-family:${font};font-size:14px;line-height:1.8;border-bottom:1px solid ${HAIRLINE};word-break:break-all;">${escapeHtml(p.value)}</td>
-</tr>`,
-    )
-    .join("");
-}
-
-/** Message section: hairline separator + muted label + bare text. No box. */
-function editorialMessage(brand: BrandConfig, label: string, message: string): string {
-  const font = fontOf(brand);
-  return `<p style="margin:26px 0 10px;font-family:${font};font-size:12px;color:${MUTED};">${escapeHtml(label)}</p>
-<p style="margin:0;font-family:${font};font-size:14px;line-height:1.9;color:${INK};white-space:pre-wrap;">${escapeHtml(message)}</p>`;
-}
-
-/**
- * Editorial design (#13): whitespace + neutral hairlines, sans type via the
- * fontFamily setting, accent colour confined to a small dot and the footer
- * link. No boxes, no fills, no coloured rules.
- */
-const editorial: TemplateFn = (input) => {
-  const loc = getLocale(input.lang);
-  const accent = input.brand.brandColor || "#1675b9";
-  const font = fontOf(input.brand);
-  let inner: string;
-  if (input.kind === "notify") {
-    const sub = input.category ? loc.email.notifySubLabel(input.category, input.submitterName ?? "") : "";
-    inner = `<tr><td style="padding:30px 36px 34px;">
-${editorialKicker(accent, font, loc.email.notifyHeading)}
-${sub ? `<h1 style="margin:0 0 24px;font-family:${font};font-size:19px;font-weight:bold;color:#111111;">${escapeHtml(sub)}</h1>` : ""}
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;border-top:1px solid ${HAIRLINE};">${editorialRows(input.brand, input.pairs)}</table>
-${input.message ? editorialMessage(input.brand, loc.email.inquiryContentLabel, input.message) : ""}
-</td></tr>`;
-  } else {
-    inner = `<tr><td style="padding:30px 36px 34px;">
-${editorialKicker(accent, font, loc.email.preheaderReceived)}
-<h1 style="margin:0 0 18px;font-family:${font};font-size:19px;font-weight:bold;color:#111111;">${escapeHtml(loc.email.autoreplyHeading)}</h1>
-${input.submitterName ? `<p style="margin:0 0 14px;font-family:${font};font-size:14px;line-height:1.9;color:${INK};">${escapeHtml(loc.email.greeting(input.submitterName))}</p>` : ""}
-<p style="margin:0;font-family:${font};font-size:14px;line-height:1.9;color:${INK};">${loc.email.autoreplyBodyHtml}</p>
-${input.message ? `<div style="margin-top:26px;border-top:1px solid ${HAIRLINE};"></div>${editorialMessage(input.brand, loc.email.inquiryContentLabel, input.message)}` : ""}
-</td></tr>`;
+function lookupVar(stack: TemplateScope[], path: string): unknown {
+  for (let i = stack.length - 1; i >= 0; i--) {
+    let cur: unknown = stack[i];
+    for (const part of path.split(".")) {
+      if (cur !== null && typeof cur === "object" && part in (cur as TemplateScope)) {
+        cur = (cur as TemplateScope)[part];
+      } else {
+        cur = undefined;
+        break;
+      }
+    }
+    if (cur !== undefined) return cur;
   }
-  const pre =
-    input.kind === "notify"
-      ? `${input.category ?? ""} ${input.submitterName ?? ""}`.trim() || loc.email.preheaderNew
-      : loc.email.preheaderReceived;
-  const html = editorialShell(input.lang, input.brand, pre, inner);
-  return { html, text: plainText(input) };
-};
+  return undefined;
+}
 
-/**
- * Serif page heading + hairline rules. No filled bands or cells, no colour
- * accents on structure — labels are quiet grey, rules are light grey, and
- * the brand colour appears only on the footer site link. Sharp corners
- * (no border-radius). Suited to quiet corporate sites where `branded`
- * feels too "SaaS".
- */
-const SERIF = "'Hiragino Mincho ProN','Yu Mincho','Noto Serif JP',Georgia,serif";
+function renderTemplateString(src: string, stack: TemplateScope[], escape: boolean): string {
+  let out = "";
+  let i = 0;
+  while (i < src.length) {
+    const open = src.indexOf("{{", i);
+    if (open === -1) {
+      out += src.slice(i);
+      break;
+    }
+    out += src.slice(i, open);
 
-const elegant: TemplateFn = (input) => {
+    // {{{raw}}}
+    if (src.startsWith("{{{", open)) {
+      const close = src.indexOf("}}}", open + 3);
+      if (close === -1) {
+        out += src.slice(open);
+        break;
+      }
+      const v = lookupVar(stack, src.slice(open + 3, close).trim());
+      out += v == null ? "" : String(v);
+      i = close + 3;
+      continue;
+    }
+
+    const close = src.indexOf("}}", open + 2);
+    if (close === -1) {
+      out += src.slice(open);
+      break;
+    }
+    const tag = src.slice(open + 2, close).trim();
+
+    // {{#section}} / {{^inverted}}
+    if (tag.startsWith("#") || tag.startsWith("^")) {
+      const key = tag.slice(1).trim();
+      const endTag = `{{/${key}}}`;
+      const end = src.indexOf(endTag, close + 2);
+      if (end === -1) {
+        // Unclosed section: drop the tag and continue.
+        i = close + 2;
+        continue;
+      }
+      const inner = src.slice(close + 2, end);
+      const v = lookupVar(stack, key);
+      const truthy = Array.isArray(v) ? v.length > 0 : Boolean(v);
+      if (tag.startsWith("#")) {
+        if (Array.isArray(v)) {
+          for (const item of v) {
+            const scope = item !== null && typeof item === "object" ? (item as TemplateScope) : { ".": item };
+            out += renderTemplateString(inner, [...stack, scope], escape);
+          }
+        } else if (truthy) {
+          const scope = v !== null && typeof v === "object" ? [...stack, v as TemplateScope] : stack;
+          out += renderTemplateString(inner, scope, escape);
+        }
+      } else if (!truthy) {
+        out += renderTemplateString(inner, stack, escape);
+      }
+      i = end + endTag.length;
+      continue;
+    }
+
+    // {{variable}}
+    const v = lookupVar(stack, tag);
+    const s = v == null ? "" : String(v);
+    out += escape ? escapeHtml(s) : s;
+    i = close + 2;
+  }
+  return out;
+}
+
+/** Variables exposed to custom templates — see the README reference table. */
+function customVars(input: RenderInput): TemplateScope {
   const loc = getLocale(input.lang);
-  const accent = input.brand.brandColor || "#1675b9";
-  const font = fontOf(input.brand);
   const brand = input.brand;
-
-  const logo = brand.logoUrl
-    ? `<img src="${escapeHtml(brand.logoUrl)}" width="28" height="28" alt="" style="display:inline-block;vertical-align:middle;border:0;" />`
-    : "";
-  const footerLines = (brand.footer ?? "")
-    .split("\n")
-    .map((l) => escapeHtml(l))
-    .join("<br>");
-  const siteLink = brand.siteUrl
-    ? `${brand.footer ? "<br>" : ""}<a href="${escapeHtml(brand.siteUrl)}" style="color:${accent};text-decoration:none;">${escapeHtml(brand.siteUrl.replace(/^https?:\/\//, ""))}</a>`
-    : "";
-
-  const rows = input.pairs
-    .filter((p) => p.value)
-    .map(
-      (p) => `<tr>
-<td style="padding:14px 20px 14px 0;color:#64748b;font-family:${font};font-size:11px;font-weight:bold;letter-spacing:.08em;white-space:nowrap;vertical-align:top;border-bottom:1px solid #f1f5f9;">${escapeHtml(p.label)}</td>
-<td style="padding:14px 0;color:#1e293b;font-family:${font};font-size:14px;line-height:1.8;border-bottom:1px solid #f1f5f9;word-break:break-all;">${escapeHtml(p.value)}</td>
-</tr>`,
-    )
-    .join("");
-
-  // サイトの案内ボックス（bg-slate-50 + border-slate-100）と同じ静かな囲み。
-  // 色付きの縦罫アクセントは使わない
-  const infoBox = (message: string) =>
-    `<div style="background:#f8fafc;border:1px solid #f1f5f9;padding:16px 18px;font-family:${font};font-size:14px;line-height:1.9;color:#1e293b;white-space:pre-wrap;">${escapeHtml(message)}</div>`;
-
-  const heading = (text: string) =>
-    `<h1 style="margin:0 0 6px;font-family:${SERIF};font-size:20px;font-weight:bold;letter-spacing:.04em;line-height:1.5;color:#0f172a;">${escapeHtml(text)}</h1>`;
-
-  const sub = input.category ? escapeHtml(loc.email.notifySubLabel(input.category, input.submitterName ?? "")) : "";
-
-  let inner: string;
-  if (input.kind === "notify") {
-    inner = `<tr><td style="padding:32px;">
-${heading(loc.email.notifyHeading)}
-${sub ? `<p style="margin:0 0 24px;font-family:${font};font-size:12px;letter-spacing:.04em;color:#64748b;">${sub}</p>` : `<div style="height:18px;line-height:18px;">&nbsp;</div>`}
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;border-top:1px solid #e2e8f0;">${rows}</table>
-${input.message ? `<p style="margin:26px 0 8px;font-family:${font};font-size:11px;font-weight:bold;letter-spacing:.08em;color:#64748b;">${escapeHtml(loc.email.inquiryContentLabel)}</p>${infoBox(input.message)}` : ""}
-</td></tr>`;
-  } else {
-    inner = `<tr><td style="padding:32px;">
-${heading(loc.email.autoreplyHeading)}
-<div style="height:12px;line-height:12px;">&nbsp;</div>
-${input.submitterName ? `<p style="margin:0 0 14px;font-family:${font};font-size:14px;line-height:1.9;color:#1e293b;">${escapeHtml(loc.email.greeting(input.submitterName))}</p>` : ""}
-<p style="margin:0 0 22px;font-family:${font};font-size:14px;line-height:1.9;color:#1e293b;">${loc.email.autoreplyBodyHtml}</p>
-${input.message ? `<p style="margin:0 0 8px;font-family:${font};font-size:11px;font-weight:bold;letter-spacing:.08em;color:#64748b;">${escapeHtml(loc.email.inquiryContentLabel)}</p>${infoBox(input.message)}` : ""}
-</td></tr>`;
-  }
-
-  const pre =
-    input.kind === "notify"
-      ? `${input.category ?? ""} ${input.submitterName ?? ""}`.trim() || loc.email.preheaderNew
-      : loc.email.preheaderReceived;
-
-  const html = `<!doctype html>
-<html lang="${input.lang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="margin:0;padding:0;background:#f8fafc;">
-<div style="display:none;max-height:0;overflow:hidden;">${escapeHtml(pre)}</div>
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;padding:32px 12px;">
-<tr><td align="center">
-<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:600px;max-width:600px;background:#ffffff;border:1px solid #e2e8f0;">
-<tr><td style="padding:22px 32px;border-bottom:1px solid #e2e8f0;">
-${logo}<span style="display:inline-block;vertical-align:middle;margin-left:${logo ? "10px" : "0"};color:#0f172a;font-family:${font};font-size:14px;font-weight:bold;letter-spacing:.06em;">${escapeHtml(brand.orgName)}</span>
-</td></tr>
-${inner}
-<tr><td style="padding:20px 32px;border-top:1px solid #e2e8f0;color:#64748b;font-family:${font};font-size:11px;line-height:1.9;letter-spacing:.02em;">
-${footerLines}${siteLink}<br>${escapeHtml(loc.email.autoFooterNote)}
-</td></tr>
-</table>
-</td></tr>
-</table>
-</body></html>`;
-
-  const textLines: string[] = [];
-  if (input.kind === "autoreply") {
-    if (input.submitterName) textLines.push(loc.email.greeting(input.submitterName), "");
-    textLines.push(...loc.email.autoreplyBodyText);
-  } else {
-    textLines.push(loc.email.notifyIntroText, "");
-  }
-  for (const p of input.pairs) if (p.value) textLines.push(`■ ${p.label}: ${p.value}`);
-  if (input.message) textLines.push("", `■ ${loc.email.inquiryContentLabel}:`, input.message);
-  textLines.push("", "--", input.brand.orgName);
-  return { html, text: textLines.join("\n") };
-};
+  const font = fontOf(brand);
+  return {
+    orgName: brand.orgName,
+    logoUrl: brand.logoUrl ?? "",
+    brandColor: brand.brandColor || "#1675b9",
+    fontFamily: font,
+    footer: brand.footer ?? "",
+    siteUrl: brand.siteUrl ?? "",
+    htmlLang: loc.email.htmlLang,
+    autoFooterNote: loc.email.autoFooterNote,
+    preheader: preheaderOf(input),
+    heading: input.kind === "notify" ? loc.email.notifyHeading : loc.email.autoreplyHeading,
+    greeting: input.submitterName ? loc.email.greeting(input.submitterName) : "",
+    autoreplyBodyHtml: loc.email.autoreplyBodyHtml,
+    inquiryContentLabel: loc.email.inquiryContentLabel,
+    category: input.category ?? "",
+    submitterName: input.submitterName ?? "",
+    message: input.message ?? "",
+    isNotify: input.kind === "notify",
+    isAutoreply: input.kind === "autoreply",
+    pairs: input.pairs.filter((p) => p.value),
+    field: input.values ?? {},
+    // Prebuilt parts (insert raw with {{{rows}}} / {{{messageBox}}}).
+    rows: rowsHtml(brand, input.pairs),
+    messageBox: input.message ? messageBox(font, input.message) : "",
+  };
+}
 
 export const TEMPLATES: Record<string, TemplateFn> = {
   branded,
-  editorial,
-  elegant,
-  // Add more designs here: e.g. minimal, card, ...
+  // Site-specific designs belong in the "custom" template (settings page),
+  // not here.
 };
 
 export function renderEmail(
   templateId: string | undefined,
   input: RenderInput,
+  custom?: CustomTemplate,
 ): { html: string; text: string } {
+  if (templateId === "custom" && custom?.html.trim()) {
+    const vars = customVars(input);
+    return {
+      html: renderTemplateString(custom.html, [vars], true),
+      text: custom.text?.trim() ? renderTemplateString(custom.text, [vars], false) : plainText(input),
+    };
+  }
   const fn = (templateId && TEMPLATES[templateId]) || branded;
   return fn(input);
 }

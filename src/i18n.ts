@@ -76,8 +76,11 @@ export interface AdminMessages {
   autoresponderSubjectLabel: string;
   templateLabel: string;
   templateBrandedOption: string;
-  templateEditorialOption: string;
-  templateElegantOption: string;
+  templateCustomOption: string;
+  customHtmlLabel: string;
+  customHtmlPlaceholder: string;
+  customTextLabel: string;
+  customTextPlaceholder: string;
   confirmMessageLabel: string;
   confirmMessagePlaceholder: string;
   fieldsLabel: string;
@@ -177,8 +180,12 @@ const en: Locale = {
     autoresponderSubjectLabel: "Auto-reply subject",
     templateLabel: "Email template",
     templateBrandedOption: "Branded",
-    templateEditorialOption: "Editorial (whitespace, hairline rules)",
-    templateElegantOption: "Elegant (serif & hairline rules)",
+    templateCustomOption: "Custom (designed below)",
+    customHtmlLabel: "Custom HTML template",
+    customHtmlPlaceholder:
+      "Used when Template = Custom. Tokens: {{orgName}} {{heading}} {{greeting}} {{message}} {{field.<name>}} / loop {{#pairs}}{{label}} {{value}}{{/pairs}} / branch {{#isNotify}}…{{/isNotify}} {{#isAutoreply}}…{{/isAutoreply}} / prebuilt parts {{{rows}}} {{{messageBox}}}. Full reference in the README.",
+    customTextLabel: "Custom plain-text template",
+    customTextPlaceholder: "Optional — same tokens, no HTML escaping. Blank = the default text version.",
     confirmMessageLabel: "Confirmation message",
     confirmMessagePlaceholder: "Optional — shown after a successful submission",
     fieldsLabel: "Field definitions",
@@ -280,8 +287,12 @@ const ja: Locale = {
     autoresponderSubjectLabel: "自動返信の件名",
     templateLabel: "メールテンプレート",
     templateBrandedOption: "Branded",
-    templateEditorialOption: "Editorial（余白・ヘアライン基調）",
-    templateElegantOption: "Elegant（明朝・罫線基調）",
+    templateCustomOption: "カスタム（下で自由に設計）",
+    customHtmlLabel: "カスタムHTMLテンプレート",
+    customHtmlPlaceholder:
+      "テンプレートで「カスタム」選択時に使用。トークン: {{orgName}} {{heading}} {{greeting}} {{message}} {{field.<name>}} ／ ループ {{#pairs}}{{label}} {{value}}{{/pairs}} ／ 分岐 {{#isNotify}}…{{/isNotify}} {{#isAutoreply}}…{{/isAutoreply}} ／ 既製パーツ {{{rows}}} {{{messageBox}}}。詳細はREADME参照。",
+    customTextLabel: "カスタムテキストテンプレート",
+    customTextPlaceholder: "任意。同じトークンが使えます（HTMLエスケープなし）。空欄なら既定のテキスト版を使用。",
     confirmMessageLabel: "送信完了メッセージ",
     confirmMessagePlaceholder: "任意。送信成功後に表示されます",
     fieldsLabel: "フィールド定義",

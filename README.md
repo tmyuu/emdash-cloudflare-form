@@ -14,7 +14,8 @@ form-submission endpoint and sends its own branded notifications.
 - **Cloudflare Turnstile** verification (`siteverify`) on every submission.
 - **Branded HTML email** to the site owner + an **auto-reply** to the submitter.
   - Configurable **org name, logo, brand colour, footer** — no code edits.
-  - **Extensible template registry** (`src/templates.ts`) — add more designs.
+  - **Custom templates** — design your own email HTML from the admin UI with
+    a mustache-style syntax (see [Custom templates](#custom-templates)).
 - **Flexible fields** — define the form fields (name/label/type/required) from
   the admin UI as JSON. New fields automatically appear in the email.
 - **Submission storage** — every submission is saved and viewable in the admin.
@@ -83,9 +84,11 @@ Deploy, then open **EmDash admin → Contact Form**:
 - **Fields** — JSON array of field definitions (defaults provided).
 - **Template** — which HTML design to use:
   - `branded` (default) — solid colour header band + tinted label cells.
-  - `editorial` — whitespace and neutral 1px hairlines, no fills or boxes,
-    sharp edges; the brand colour appears only as a small dot accent and the
-    footer link. Type follows the **Email font** setting. Works for any site.
+  - `custom` — your own design, authored in the two fields below
+    (see [Custom templates](#custom-templates)).
+- **Custom HTML template / Custom plain-text template** — used when
+  Template = Custom. If the HTML field is blank, `branded` is used; if only
+  the text field is blank, the default text rendering is used.
 
 ### 3. Point your form at the submit endpoint
 
@@ -104,6 +107,53 @@ definitions, confirmation message) is available at:
 
 ```
 GET /_emdash/api/plugins/cf-form/config
+```
+
+## Custom templates
+
+Selecting the `custom` template renders the admin-authored HTML through a
+small mustache-style engine. One template covers both emails — branch on
+`{{#isNotify}}` / `{{#isAutoreply}}` where they differ.
+
+Syntax:
+
+| Token | Meaning |
+|---|---|
+| `{{name}}` | Variable, HTML-escaped (not escaped in the text template) |
+| `{{{name}}}` | Variable, raw — for the prebuilt HTML parts |
+| `{{#key}}…{{/key}}` | Loop over an array, or render-if-truthy |
+| `{{^key}}…{{/key}}` | Render-if-falsy |
+
+Substituted values are inserted exactly once and never re-parsed, so
+submitted form data containing `{{…}}` cannot inject template code. A section
+cannot nest another section with the same key.
+
+Variables:
+
+| Variable | Content |
+|---|---|
+| `{{orgName}}` `{{logoUrl}}` `{{brandColor}}` `{{footer}}` `{{siteUrl}}` | Branding settings |
+| `{{fontFamily}}` | The **Email font** setting (or the default stack) |
+| `{{heading}}` | Locale heading for the current email kind |
+| `{{greeting}}` | Localized greeting line (empty without a submitter name) |
+| `{{category}}` `{{submitterName}}` `{{message}}` | Submission-derived fields |
+| `{{field.<name>}}` | Any submitted value by field name (e.g. `{{field.email}}`) |
+| `{{#pairs}}{{label}} {{value}}{{/pairs}}` | Loop over non-empty fields (message excluded) |
+| `{{isNotify}}` / `{{isAutoreply}}` | Email-kind flags for `{{#…}}` branches |
+| `{{preheader}}` `{{htmlLang}}` `{{autoFooterNote}}` `{{inquiryContentLabel}}` `{{{autoreplyBodyHtml}}}` | Locale strings |
+| `{{{rows}}}` | Prebuilt field table rows (branded style) |
+| `{{{messageBox}}}` | Prebuilt message box (empty when no message) |
+
+Minimal example:
+
+```html
+<body style="font-family:{{fontFamily}};">
+  <h1>{{heading}}</h1>
+  {{#isAutoreply}}<p>{{greeting}}</p><p>{{{autoreplyBodyHtml}}}</p>{{/isAutoreply}}
+  <table>{{#pairs}}<tr><td>{{label}}</td><td>{{value}}</td></tr>{{/pairs}}</table>
+  {{#message}}<h2>{{inquiryContentLabel}}</h2><p>{{message}}</p>{{/message}}
+  <p>{{footer}} — {{orgName}}</p>
+</body>
 ```
 
 ## How it works
