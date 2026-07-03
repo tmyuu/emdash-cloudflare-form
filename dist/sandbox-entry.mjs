@@ -22,6 +22,8 @@ const LOCALES = {
 			logoUrlPlaceholder: "https://example.com/icon.png — PNG, absolute URL",
 			brandColorLabel: "Brand color",
 			brandColorPlaceholder: "#1675b9",
+			fontFamilyLabel: "Email font",
+			fontFamilyPlaceholder: "CSS font-family list, e.g. 'Hiragino Mincho ProN','Yu Mincho',serif — email clients only use device fonts (web fonts are ignored). Blank = default sans stack",
 			footerLabel: "Footer",
 			footerPlaceholder: "Address, tel, etc. — line breaks allowed",
 			siteUrlLabel: "Site URL",
@@ -49,6 +51,9 @@ const LOCALES = {
 			toastSaveFailed: "Failed to save.",
 			toastInvalidFrom: "From must be in the form name@domain or Name <name@domain>.",
 			toastInvalidFields: "Field definitions are not valid JSON.",
+			toastInvalidFont: "Email font must be a CSS font-family list (the characters <>\"{};\\ are not allowed).",
+			turnstileStatusSet: "Turnstile secret key: configured.",
+			turnstileStatusMissing: "Turnstile secret key: not configured — submissions are rejected until it is set.",
 			submissionsTitle: "Form Submissions",
 			colReceivedAt: "Received at",
 			colCategory: "Category",
@@ -140,6 +145,8 @@ const LOCALES = {
 			logoUrlPlaceholder: "https://example.com/icon.png ・PNG推奨・絶対URL",
 			brandColorLabel: "ブランドカラー",
 			brandColorPlaceholder: "#1675b9",
+			fontFamilyLabel: "メールフォント",
+			fontFamilyPlaceholder: "CSSのfont-family形式。例: 'Hiragino Mincho ProN','Yu Mincho',serif ・メールでは端末フォントのみ有効（Webフォント不可）。空欄で既定のゴシック",
 			footerLabel: "フッタ",
 			footerPlaceholder: "住所・TEL など。改行できます",
 			siteUrlLabel: "サイトURL",
@@ -167,6 +174,9 @@ const LOCALES = {
 			toastSaveFailed: "保存に失敗しました",
 			toastInvalidFrom: "From は name@domain か Name <name@domain> 形式で入力してください",
 			toastInvalidFields: "フィールド定義が不正なJSONです",
+			toastInvalidFont: "メールフォントは CSS の font-family 形式で入力してください（<>\"{};\\ は使用できません）",
+			turnstileStatusSet: "Turnstile シークレットキー: 設定済み",
+			turnstileStatusMissing: "Turnstile シークレットキー: 未設定 — 設定するまでフォーム送信は受け付けられません",
 			submissionsTitle: "お問い合わせ送信履歴",
 			colReceivedAt: "受信日時",
 			colCategory: "種別",
@@ -256,21 +266,14 @@ function defaultFields(lang) {
 		options: f.options ? [...f.options] : void 0
 	}));
 }
-//#endregion
-//#region src/templates.ts
 /**
-* Branded HTML email templates for emdash-cloudflare-form.
-*
-* Templates are a registry keyed by id — add new entries to `TEMPLATES`
-* to offer more designs (selectable from the admin settings page via the
-* "Template" field). Each template renders both a notification (to the
-* site owner) and an auto-reply (to the submitter) from the same data,
-* so adding a form field automatically appears in the email.
-*
-* All human-readable strings come from the active locale (`src/i18n.ts`),
-* selected by the runtime "Language" setting — no text is hard-coded here.
+* The font stack actually embedded into inline styles. The setting is
+* validated on save, but strip style-breaking characters here too so a
+* value written to KV by other means cannot escape the attribute.
 */
-const SANS = "'Hiragino Sans','Hiragino Kaku Gothic ProN','Yu Gothic',Meiryo,'Segoe UI',sans-serif";
+function fontOf(brand) {
+	return brand.fontFamily?.replace(/[<>"{};\\]/g, "").trim() || "'Hiragino Sans','Hiragino Kaku Gothic ProN','Yu Gothic',Meiryo,'Segoe UI',sans-serif";
+}
 function escapeHtml(s) {
 	return s.replace(/[&<>"']/g, (c) => ({
 		"&": "&amp;",
@@ -283,6 +286,7 @@ function escapeHtml(s) {
 function shell(lang, brand, preheader, inner) {
 	const loc = getLocale(lang);
 	const accent = brand.brandColor || "#1675b9";
+	const font = fontOf(brand);
 	const logo = brand.logoUrl ? `<img src="${escapeHtml(brand.logoUrl)}" width="34" height="34" alt="" style="display:inline-block;vertical-align:middle;border:0;border-radius:6px;background:#ffffff;" />` : "";
 	const footerLines = (brand.footer || "").split("\n").map((l) => escapeHtml(l)).join("<br>");
 	const siteLink = brand.siteUrl ? `<br><a href="${escapeHtml(brand.siteUrl)}" style="color:${accent};text-decoration:none;">${escapeHtml(brand.siteUrl.replace(/^https?:\/\//, ""))}</a>` : "";
@@ -293,10 +297,10 @@ function shell(lang, brand, preheader, inner) {
 <tr><td align="center">
 <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:600px;max-width:600px;background:#ffffff;border:1px solid #e2e8f0;border-radius:4px;overflow:hidden;">
 <tr><td style="background:${accent};padding:18px 28px;">
-${logo}<span style="display:inline-block;vertical-align:middle;margin-left:${logo ? "12px" : "0"};color:#ffffff;font-family:${SANS};font-size:16px;font-weight:bold;letter-spacing:.04em;">${escapeHtml(brand.orgName)}</span>
+${logo}<span style="display:inline-block;vertical-align:middle;margin-left:${logo ? "12px" : "0"};color:#ffffff;font-family:${font};font-size:16px;font-weight:bold;letter-spacing:.04em;">${escapeHtml(brand.orgName)}</span>
 </td></tr>
 ${inner}
-<tr><td style="padding:18px 28px;background:#f8fafc;border-top:1px solid #e2e8f0;color:#64748b;font-family:${SANS};font-size:12px;line-height:1.8;">
+<tr><td style="padding:18px 28px;background:#f8fafc;border-top:1px solid #e2e8f0;color:#64748b;font-family:${font};font-size:12px;line-height:1.8;">
 ${footerLines}${siteLink}<br>${escapeHtml(loc.email.autoFooterNote)}
 </td></tr>
 </table>
@@ -304,31 +308,33 @@ ${footerLines}${siteLink}<br>${escapeHtml(loc.email.autoFooterNote)}
 }
 function rowsHtml(brand, pairs) {
 	const accent = brand.brandColor || "#1675b9";
+	const font = fontOf(brand);
 	return pairs.filter((p) => p.value).map((p) => `<tr>
-<td style="padding:10px 14px;background:#eef6fd;color:${accent};font-family:${SANS};font-size:12px;font-weight:bold;white-space:nowrap;vertical-align:top;border-bottom:1px solid #e2e8f0;">${escapeHtml(p.label)}</td>
-<td style="padding:10px 14px;color:#1e293b;font-family:${SANS};font-size:14px;line-height:1.7;border-bottom:1px solid #e2e8f0;word-break:break-all;">${escapeHtml(p.value)}</td>
+<td style="padding:10px 14px;background:#eef6fd;color:${accent};font-family:${font};font-size:12px;font-weight:bold;white-space:nowrap;vertical-align:top;border-bottom:1px solid #e2e8f0;">${escapeHtml(p.label)}</td>
+<td style="padding:10px 14px;color:#1e293b;font-family:${font};font-size:14px;line-height:1.7;border-bottom:1px solid #e2e8f0;word-break:break-all;">${escapeHtml(p.value)}</td>
 </tr>`).join("");
 }
-function messageBox(message) {
-	return `<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:4px;padding:16px;font-family:${SANS};font-size:14px;line-height:1.9;color:#1e293b;white-space:pre-wrap;">${escapeHtml(message)}</div>`;
+function messageBox(font, message) {
+	return `<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:4px;padding:16px;font-family:${font};font-size:14px;line-height:1.9;color:#1e293b;white-space:pre-wrap;">${escapeHtml(message)}</div>`;
 }
 /** The default branded design. */
 const branded = (input) => {
 	const loc = getLocale(input.lang);
 	const accent = input.brand.brandColor || "#1675b9";
+	const font = fontOf(input.brand);
 	const sub = input.category ? escapeHtml(loc.email.notifySubLabel(input.category, input.submitterName ?? "")) : "";
 	let inner;
 	if (input.kind === "notify") inner = `<tr><td style="padding:28px;">
-<h1 style="margin:0 0 4px;font-family:${SANS};font-size:18px;color:#0f172a;">${escapeHtml(loc.email.notifyHeading)}</h1>
-${sub ? `<p style="margin:0 0 20px;font-family:${SANS};font-size:13px;color:#64748b;">${sub}</p>` : ""}
+<h1 style="margin:0 0 4px;font-family:${font};font-size:18px;color:#0f172a;">${escapeHtml(loc.email.notifyHeading)}</h1>
+${sub ? `<p style="margin:0 0 20px;font-family:${font};font-size:13px;color:#64748b;">${sub}</p>` : ""}
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e2e8f0;border-collapse:collapse;">${rowsHtml(input.brand, input.pairs)}</table>
-${input.message ? `<p style="margin:22px 0 6px;font-family:${SANS};font-size:13px;font-weight:bold;color:${accent};">${escapeHtml(loc.email.inquiryContentLabel)}</p>${messageBox(input.message)}` : ""}
+${input.message ? `<p style="margin:22px 0 6px;font-family:${font};font-size:13px;font-weight:bold;color:${accent};">${escapeHtml(loc.email.inquiryContentLabel)}</p>${messageBox(font, input.message)}` : ""}
 </td></tr>`;
 	else inner = `<tr><td style="padding:28px;">
-<h1 style="margin:0 0 16px;font-family:${SANS};font-size:18px;color:#0f172a;">${escapeHtml(loc.email.autoreplyHeading)}</h1>
-${input.submitterName ? `<p style="margin:0 0 14px;font-family:${SANS};font-size:14px;line-height:1.9;color:#1e293b;">${escapeHtml(loc.email.greeting(input.submitterName))}</p>` : ""}
-<p style="margin:0 0 18px;font-family:${SANS};font-size:14px;line-height:1.9;color:#1e293b;">${loc.email.autoreplyBodyHtml}</p>
-${input.message ? `<p style="margin:0 0 6px;font-family:${SANS};font-size:13px;font-weight:bold;color:${accent};">${escapeHtml(loc.email.inquiryContentLabel)}</p>${messageBox(input.message)}` : ""}
+<h1 style="margin:0 0 16px;font-family:${font};font-size:18px;color:#0f172a;">${escapeHtml(loc.email.autoreplyHeading)}</h1>
+${input.submitterName ? `<p style="margin:0 0 14px;font-family:${font};font-size:14px;line-height:1.9;color:#1e293b;">${escapeHtml(loc.email.greeting(input.submitterName))}</p>` : ""}
+<p style="margin:0 0 18px;font-family:${font};font-size:14px;line-height:1.9;color:#1e293b;">${loc.email.autoreplyBodyHtml}</p>
+${input.message ? `<p style="margin:0 0 6px;font-family:${font};font-size:13px;font-weight:bold;color:${accent};">${escapeHtml(loc.email.inquiryContentLabel)}</p>${messageBox(font, input.message)}` : ""}
 </td></tr>`;
 	const pre = input.kind === "notify" ? `${input.category ?? ""} ${input.submitterName ?? ""}`.trim() || loc.email.preheaderNew : loc.email.preheaderReceived;
 	const html = shell(input.lang, input.brand, pre, inner);
@@ -359,6 +365,7 @@ const K = {
 	orgName: "settings:orgName",
 	logoUrl: "settings:logoUrl",
 	brandColor: "settings:brandColor",
+	fontFamily: "settings:fontFamily",
 	footer: "settings:footer",
 	siteUrl: "settings:siteUrl",
 	fromAddress: "settings:fromAddress",
@@ -426,6 +433,7 @@ async function loadConfig(ctx) {
 			orgName: await getStr(ctx, K.orgName, loc.defaults.orgName),
 			logoUrl: await getStr(ctx, K.logoUrl),
 			brandColor: await getStr(ctx, K.brandColor, "#1675b9"),
+			fontFamily: await getStr(ctx, K.fontFamily),
 			footer: await getStr(ctx, K.footer),
 			siteUrl: await getStr(ctx, K.siteUrl)
 		},
@@ -598,6 +606,10 @@ async function buildSettingsPage(ctx) {
 			text: t.settingsIntro
 		},
 		{
+			type: "section",
+			text: cfg.turnstileSecret ? t.turnstileStatusSet : t.turnstileStatusMissing
+		},
+		{
 			type: "form",
 			submit: {
 				label: t.saveButton,
@@ -634,6 +646,13 @@ async function buildSettingsPage(ctx) {
 					label: t.brandColorLabel,
 					placeholder: t.brandColorPlaceholder,
 					initial_value: cfg.brand.brandColor
+				},
+				{
+					type: "text_input",
+					action_id: "fontFamily",
+					label: t.fontFamilyLabel,
+					placeholder: t.fontFamilyPlaceholder,
+					initial_value: cfg.brand.fontFamily ?? ""
 				},
 				{
 					type: "text_input",
@@ -752,6 +771,13 @@ async function saveSettings(ctx, values) {
 				type: "error"
 			}
 		};
+		if (typeof values.fontFamily === "string" && /[<>"{};\\]/.test(values.fontFamily)) return {
+			...await buildSettingsPage(ctx),
+			toast: {
+				message: t.toastInvalidFont,
+				type: "error"
+			}
+		};
 		if (typeof values.fields === "string" && values.fields.trim()) try {
 			const p = JSON.parse(values.fields);
 			if (!Array.isArray(p)) throw new Error("not array");
@@ -767,6 +793,7 @@ async function saveSettings(ctx, values) {
 		await setStr(K.orgName, values.orgName);
 		await setStr(K.logoUrl, values.logoUrl);
 		await setStr(K.brandColor, values.brandColor);
+		await setStr(K.fontFamily, values.fontFamily);
 		await setStr(K.footer, values.footer);
 		await setStr(K.siteUrl, values.siteUrl);
 		await setStr(K.fromAddress, values.fromAddress);
