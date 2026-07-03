@@ -173,21 +173,31 @@ function plainText(input: RenderInput): string {
   return textLines.join("\n");
 }
 
-// --- elegant: serif headings, hairline rules, no fills (#13) ------------------
+// --- editorial: hairline rules, whitespace, dot accent (#13) ------------------
+//
+// Follows the lineage of an editorial-minimal site: sans type (the fontFamily
+// setting), neutral hairlines only (never the accent colour as a rule), no
+// boxes or fills around text, sharp edges. The accent colour appears in
+// exactly two places — a small status dot in the kicker and the footer link —
+// so it stays site-agnostic while reading as a deliberate accent.
 
-/**
- * Serif stack for elegant headings. Email clients only use installed fonts,
- * so this leads with the common JP mincho faces and falls back to Western
- * serifs.
- */
-const ELEGANT_SERIF = "'Hiragino Mincho ProN','Yu Mincho','Times New Roman',Georgia,serif";
+const HAIRLINE = "#e5e5e5";
+const INK = "#1a1a1a";
+const MUTED = "#8a8a8a";
 
-function elegantShell(lang: Lang, brand: BrandConfig, preheader: string, inner: string): string {
+/** Kicker line: small accent dot + muted label (the site's eyebrow pattern). */
+function editorialKicker(accent: string, font: string, label: string): string {
+  return `<p style="margin:0 0 14px;font-family:${font};font-size:11px;color:${MUTED};">
+<span style="display:inline-block;width:6px;height:6px;border-radius:6px;background:${accent};vertical-align:middle;margin-right:8px;"></span><span style="vertical-align:middle;">${escapeHtml(label)}</span>
+</p>`;
+}
+
+function editorialShell(lang: Lang, brand: BrandConfig, preheader: string, inner: string): string {
   const loc = getLocale(lang);
   const accent = brand.brandColor || "#1675b9";
   const font = fontOf(brand);
   const logo = brand.logoUrl
-    ? `<img src="${escapeHtml(brand.logoUrl)}" width="30" height="30" alt="" style="display:inline-block;vertical-align:middle;border:0;background:#ffffff;" />`
+    ? `<img src="${escapeHtml(brand.logoUrl)}" width="24" height="24" alt="" style="display:inline-block;vertical-align:middle;border:0;background:#ffffff;" />`
     : "";
   const footerLines = (brand.footer || "")
     .split("\n")
@@ -199,78 +209,81 @@ function elegantShell(lang: Lang, brand: BrandConfig, preheader: string, inner: 
       )}</a>`
     : "";
   return `<!doctype html><html lang="${escapeHtml(loc.email.htmlLang)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="margin:0;padding:0;background:#f6f6f4;">
-<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:#f6f6f4;">${escapeHtml(preheader)}</div>
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f6f6f4;padding:32px 0;">
+<body style="margin:0;padding:0;background:#fafafa;">
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:#fafafa;">${escapeHtml(preheader)}</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#fafafa;padding:32px 0;">
 <tr><td align="center">
-<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:600px;max-width:600px;background:#ffffff;border:1px solid #e4e4e0;">
-<tr><td style="padding:26px 32px 20px;border-bottom:1px solid ${accent};">
-${logo}<span style="display:inline-block;vertical-align:middle;margin-left:${logo ? "12px" : "0"};color:#111111;font-family:${ELEGANT_SERIF};font-size:17px;">${escapeHtml(brand.orgName)}</span>
+<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:600px;max-width:600px;background:#ffffff;border:1px solid ${HAIRLINE};">
+<tr><td style="padding:22px 36px;border-bottom:1px solid ${HAIRLINE};">
+${logo}<span style="display:inline-block;vertical-align:middle;margin-left:${logo ? "10px" : "0"};color:#111111;font-family:${font};font-size:15px;font-weight:bold;">${escapeHtml(brand.orgName)}</span>
 </td></tr>
 ${inner}
-<tr><td style="padding:20px 32px 24px;border-top:1px solid #e4e4e0;color:#8a8a86;font-family:${font};font-size:12px;line-height:1.9;">
+<tr><td style="padding:22px 36px 28px;border-top:1px solid ${HAIRLINE};color:${MUTED};font-family:${font};font-size:12px;line-height:1.9;">
 ${footerLines}${siteLink}<br>${escapeHtml(loc.email.autoFooterNote)}
 </td></tr>
 </table>
 </td></tr></table></body></html>`;
 }
 
-function elegantRows(brand: BrandConfig, pairs: RenderInput["pairs"]): string {
-  const accent = brand.brandColor || "#1675b9";
+/** Definition-list rows: muted labels, neutral hairlines, no cell fills. */
+function editorialRows(brand: BrandConfig, pairs: RenderInput["pairs"]): string {
   const font = fontOf(brand);
   return pairs
     .filter((p) => p.value)
     .map(
       (p) => `<tr>
-<td style="padding:12px 16px 12px 0;color:${accent};font-family:${font};font-size:12px;font-weight:bold;white-space:nowrap;vertical-align:top;border-bottom:1px solid #e8e8e4;">${escapeHtml(p.label)}</td>
-<td style="padding:12px 0;color:#222222;font-family:${font};font-size:14px;line-height:1.8;border-bottom:1px solid #e8e8e4;word-break:break-all;">${escapeHtml(p.value)}</td>
+<td style="padding:14px 24px 14px 0;color:${MUTED};font-family:${font};font-size:12px;white-space:nowrap;vertical-align:top;border-bottom:1px solid ${HAIRLINE};">${escapeHtml(p.label)}</td>
+<td style="padding:14px 0;color:${INK};font-family:${font};font-size:14px;line-height:1.8;border-bottom:1px solid ${HAIRLINE};word-break:break-all;">${escapeHtml(p.value)}</td>
 </tr>`,
     )
     .join("");
 }
 
-function elegantMessage(brand: BrandConfig, message: string): string {
-  const accent = brand.brandColor || "#1675b9";
+/** Message section: hairline separator + muted label + bare text. No box. */
+function editorialMessage(brand: BrandConfig, label: string, message: string): string {
   const font = fontOf(brand);
-  return `<div style="border-left:2px solid ${accent};background:#fafaf8;padding:14px 18px;font-family:${font};font-size:14px;line-height:1.9;color:#222222;white-space:pre-wrap;">${escapeHtml(message)}</div>`;
+  return `<p style="margin:26px 0 10px;font-family:${font};font-size:12px;color:${MUTED};">${escapeHtml(label)}</p>
+<p style="margin:0;font-family:${font};font-size:14px;line-height:1.9;color:${INK};white-space:pre-wrap;">${escapeHtml(message)}</p>`;
 }
 
 /**
- * Elegant design (#13): serif headings, 1px rules instead of fills, sharp
- * edges. All colour derives from `brandColor`, so it stays site-agnostic.
+ * Editorial design (#13): whitespace + neutral hairlines, sans type via the
+ * fontFamily setting, accent colour confined to a small dot and the footer
+ * link. No boxes, no fills, no coloured rules.
  */
-const elegant: TemplateFn = (input) => {
+const editorial: TemplateFn = (input) => {
   const loc = getLocale(input.lang);
   const accent = input.brand.brandColor || "#1675b9";
   const font = fontOf(input.brand);
-  const sub = input.category ? escapeHtml(loc.email.notifySubLabel(input.category, input.submitterName ?? "")) : "";
   let inner: string;
   if (input.kind === "notify") {
-    inner = `<tr><td style="padding:30px 32px;">
-<h1 style="margin:0 0 6px;font-family:${ELEGANT_SERIF};font-size:20px;font-weight:normal;color:#111111;">${escapeHtml(loc.email.notifyHeading)}</h1>
-${sub ? `<p style="margin:0 0 22px;font-family:${font};font-size:13px;color:#777772;">${sub}</p>` : ""}
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;border-top:1px solid #e8e8e4;">${elegantRows(input.brand, input.pairs)}</table>
-${input.message ? `<p style="margin:24px 0 8px;font-family:${font};font-size:12px;font-weight:bold;color:${accent};">${escapeHtml(loc.email.inquiryContentLabel)}</p>${elegantMessage(input.brand, input.message)}` : ""}
+    const sub = input.category ? loc.email.notifySubLabel(input.category, input.submitterName ?? "") : "";
+    inner = `<tr><td style="padding:30px 36px 34px;">
+${editorialKicker(accent, font, loc.email.notifyHeading)}
+${sub ? `<h1 style="margin:0 0 24px;font-family:${font};font-size:19px;font-weight:bold;color:#111111;">${escapeHtml(sub)}</h1>` : ""}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;border-top:1px solid ${HAIRLINE};">${editorialRows(input.brand, input.pairs)}</table>
+${input.message ? editorialMessage(input.brand, loc.email.inquiryContentLabel, input.message) : ""}
 </td></tr>`;
   } else {
-    inner = `<tr><td style="padding:30px 32px;">
-<h1 style="margin:0 0 18px;font-family:${ELEGANT_SERIF};font-size:20px;font-weight:normal;color:#111111;">${escapeHtml(loc.email.autoreplyHeading)}</h1>
-${input.submitterName ? `<p style="margin:0 0 14px;font-family:${font};font-size:14px;line-height:1.9;color:#222222;">${escapeHtml(loc.email.greeting(input.submitterName))}</p>` : ""}
-<p style="margin:0 0 20px;font-family:${font};font-size:14px;line-height:1.9;color:#222222;">${loc.email.autoreplyBodyHtml}</p>
-${input.message ? `<p style="margin:0 0 8px;font-family:${font};font-size:12px;font-weight:bold;color:${accent};">${escapeHtml(loc.email.inquiryContentLabel)}</p>${elegantMessage(input.brand, input.message)}` : ""}
+    inner = `<tr><td style="padding:30px 36px 34px;">
+${editorialKicker(accent, font, loc.email.preheaderReceived)}
+<h1 style="margin:0 0 18px;font-family:${font};font-size:19px;font-weight:bold;color:#111111;">${escapeHtml(loc.email.autoreplyHeading)}</h1>
+${input.submitterName ? `<p style="margin:0 0 14px;font-family:${font};font-size:14px;line-height:1.9;color:${INK};">${escapeHtml(loc.email.greeting(input.submitterName))}</p>` : ""}
+<p style="margin:0;font-family:${font};font-size:14px;line-height:1.9;color:${INK};">${loc.email.autoreplyBodyHtml}</p>
+${input.message ? `<div style="margin-top:26px;border-top:1px solid ${HAIRLINE};"></div>${editorialMessage(input.brand, loc.email.inquiryContentLabel, input.message)}` : ""}
 </td></tr>`;
   }
   const pre =
     input.kind === "notify"
       ? `${input.category ?? ""} ${input.submitterName ?? ""}`.trim() || loc.email.preheaderNew
       : loc.email.preheaderReceived;
-  const html = elegantShell(input.lang, input.brand, pre, inner);
+  const html = editorialShell(input.lang, input.brand, pre, inner);
   return { html, text: plainText(input) };
 };
 
 export const TEMPLATES: Record<string, TemplateFn> = {
   branded,
-  elegant,
+  editorial,
   // Add more designs here: e.g. minimal, card, ...
 };
 
