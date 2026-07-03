@@ -400,6 +400,14 @@ function parseFrom(input) {
 		name
 	} : { email };
 }
+/** parseFrom の結果を binding が受け付ける形（文字列 or name 必須オブジェクト）に変換する */
+function toSendAddress(parsed, fallbackName) {
+	const name = parsed.name ?? fallbackName?.trim();
+	return name ? {
+		email: parsed.email,
+		name
+	} : parsed.email;
+}
 function getBinding(name) {
 	const binding = env[name];
 	if (!binding || typeof binding.send !== "function") throw new Error(`Cloudflare Email Sending binding "${name}" not found on env. Add { "send_email": [{ "name": "${name}" }] } to wrangler config and run the plugin in-process (plugins:, not sandboxed:).`);
@@ -459,11 +467,12 @@ function getHeader(req, name) {
 async function handleSubmit(routeCtx, ctx) {
 	const cfg = await loadConfig(ctx);
 	const loc = getLocale(cfg.lang);
-	const from = parseFrom(cfg.from);
-	if (!cfg.turnstileSecret || !from || cfg.toEmails.length === 0) return {
+	const parsedFrom = parseFrom(cfg.from);
+	if (!cfg.turnstileSecret || !parsedFrom || cfg.toEmails.length === 0) return {
 		ok: false,
 		error: "not_configured"
 	};
+	const from = toSendAddress(parsedFrom, cfg.brand.orgName);
 	const body = routeCtx.input ?? {};
 	const token = clip(body.token ?? body["cf-turnstile-response"], 4e3);
 	if (!token) return {
@@ -527,7 +536,7 @@ async function handleSubmit(routeCtx, ctx) {
 			category
 		});
 		await binding.send({
-			to: cfg.toEmails.map((email) => ({ email })),
+			to: cfg.toEmails,
 			from,
 			replyTo: submitterEmail || void 0,
 			subject: subjectTokens(cfg.notifySubject),
