@@ -527,7 +527,7 @@ async function handleSubmit(routeCtx, ctx) {
 			category
 		});
 		await binding.send({
-			to: cfg.toEmails,
+			to: cfg.toEmails.map((email) => ({ email })),
 			from,
 			replyTo: submitterEmail || void 0,
 			subject: subjectTokens(cfg.notifySubject),
