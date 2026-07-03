@@ -26,6 +26,13 @@ export interface BrandConfig {
   footer?: string;
   /** Optional site URL shown in the footer. */
   siteUrl?: string;
+  /**
+   * CSS font-family list used throughout the email. Email clients ignore
+   * web fonts, so this only reorders system-font fallbacks — but that is
+   * enough to match a site's tone (e.g. lead with a mincho/serif stack).
+   * Blank = `DEFAULT_FONT_FAMILY`.
+   */
+  fontFamily?: string;
 }
 
 export interface RenderInput {
@@ -45,8 +52,18 @@ export interface RenderInput {
 
 export type TemplateFn = (input: RenderInput) => { html: string; text: string };
 
-const SANS =
+export const DEFAULT_FONT_FAMILY =
   "'Hiragino Sans','Hiragino Kaku Gothic ProN','Yu Gothic',Meiryo,'Segoe UI',sans-serif";
+
+/**
+ * The font stack actually embedded into inline styles. The setting is
+ * validated on save, but strip style-breaking characters here too so a
+ * value written to KV by other means cannot escape the attribute.
+ */
+function fontOf(brand: BrandConfig): string {
+  const f = brand.fontFamily?.replace(/[<>"{};\\]/g, "").trim();
+  return f || DEFAULT_FONT_FAMILY;
+}
 
 export function escapeHtml(s: string): string {
   return s.replace(
@@ -62,6 +79,7 @@ export function escapeHtml(s: string): string {
 function shell(lang: Lang, brand: BrandConfig, preheader: string, inner: string): string {
   const loc = getLocale(lang);
   const accent = brand.brandColor || "#1675b9";
+  const font = fontOf(brand);
   const logo = brand.logoUrl
     ? `<img src="${escapeHtml(brand.logoUrl)}" width="34" height="34" alt="" style="display:inline-block;vertical-align:middle;border:0;border-radius:6px;background:#ffffff;" />`
     : "";
@@ -81,10 +99,10 @@ function shell(lang: Lang, brand: BrandConfig, preheader: string, inner: string)
 <tr><td align="center">
 <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:600px;max-width:600px;background:#ffffff;border:1px solid #e2e8f0;border-radius:4px;overflow:hidden;">
 <tr><td style="background:${accent};padding:18px 28px;">
-${logo}<span style="display:inline-block;vertical-align:middle;margin-left:${logo ? "12px" : "0"};color:#ffffff;font-family:${SANS};font-size:16px;font-weight:bold;letter-spacing:.04em;">${escapeHtml(brand.orgName)}</span>
+${logo}<span style="display:inline-block;vertical-align:middle;margin-left:${logo ? "12px" : "0"};color:#ffffff;font-family:${font};font-size:16px;font-weight:bold;letter-spacing:.04em;">${escapeHtml(brand.orgName)}</span>
 </td></tr>
 ${inner}
-<tr><td style="padding:18px 28px;background:#f8fafc;border-top:1px solid #e2e8f0;color:#64748b;font-family:${SANS};font-size:12px;line-height:1.8;">
+<tr><td style="padding:18px 28px;background:#f8fafc;border-top:1px solid #e2e8f0;color:#64748b;font-family:${font};font-size:12px;line-height:1.8;">
 ${footerLines}${siteLink}<br>${escapeHtml(loc.email.autoFooterNote)}
 </td></tr>
 </table>
@@ -93,40 +111,42 @@ ${footerLines}${siteLink}<br>${escapeHtml(loc.email.autoFooterNote)}
 
 function rowsHtml(brand: BrandConfig, pairs: RenderInput["pairs"]): string {
   const accent = brand.brandColor || "#1675b9";
+  const font = fontOf(brand);
   return pairs
     .filter((p) => p.value)
     .map(
       (p) => `<tr>
-<td style="padding:10px 14px;background:#eef6fd;color:${accent};font-family:${SANS};font-size:12px;font-weight:bold;white-space:nowrap;vertical-align:top;border-bottom:1px solid #e2e8f0;">${escapeHtml(p.label)}</td>
-<td style="padding:10px 14px;color:#1e293b;font-family:${SANS};font-size:14px;line-height:1.7;border-bottom:1px solid #e2e8f0;word-break:break-all;">${escapeHtml(p.value)}</td>
+<td style="padding:10px 14px;background:#eef6fd;color:${accent};font-family:${font};font-size:12px;font-weight:bold;white-space:nowrap;vertical-align:top;border-bottom:1px solid #e2e8f0;">${escapeHtml(p.label)}</td>
+<td style="padding:10px 14px;color:#1e293b;font-family:${font};font-size:14px;line-height:1.7;border-bottom:1px solid #e2e8f0;word-break:break-all;">${escapeHtml(p.value)}</td>
 </tr>`,
     )
     .join("");
 }
 
-function messageBox(message: string): string {
-  return `<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:4px;padding:16px;font-family:${SANS};font-size:14px;line-height:1.9;color:#1e293b;white-space:pre-wrap;">${escapeHtml(message)}</div>`;
+function messageBox(font: string, message: string): string {
+  return `<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:4px;padding:16px;font-family:${font};font-size:14px;line-height:1.9;color:#1e293b;white-space:pre-wrap;">${escapeHtml(message)}</div>`;
 }
 
 /** The default branded design. */
 const branded: TemplateFn = (input) => {
   const loc = getLocale(input.lang);
   const accent = input.brand.brandColor || "#1675b9";
+  const font = fontOf(input.brand);
   const sub = input.category ? escapeHtml(loc.email.notifySubLabel(input.category, input.submitterName ?? "")) : "";
   let inner: string;
   if (input.kind === "notify") {
     inner = `<tr><td style="padding:28px;">
-<h1 style="margin:0 0 4px;font-family:${SANS};font-size:18px;color:#0f172a;">${escapeHtml(loc.email.notifyHeading)}</h1>
-${sub ? `<p style="margin:0 0 20px;font-family:${SANS};font-size:13px;color:#64748b;">${sub}</p>` : ""}
+<h1 style="margin:0 0 4px;font-family:${font};font-size:18px;color:#0f172a;">${escapeHtml(loc.email.notifyHeading)}</h1>
+${sub ? `<p style="margin:0 0 20px;font-family:${font};font-size:13px;color:#64748b;">${sub}</p>` : ""}
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e2e8f0;border-collapse:collapse;">${rowsHtml(input.brand, input.pairs)}</table>
-${input.message ? `<p style="margin:22px 0 6px;font-family:${SANS};font-size:13px;font-weight:bold;color:${accent};">${escapeHtml(loc.email.inquiryContentLabel)}</p>${messageBox(input.message)}` : ""}
+${input.message ? `<p style="margin:22px 0 6px;font-family:${font};font-size:13px;font-weight:bold;color:${accent};">${escapeHtml(loc.email.inquiryContentLabel)}</p>${messageBox(font, input.message)}` : ""}
 </td></tr>`;
   } else {
     inner = `<tr><td style="padding:28px;">
-<h1 style="margin:0 0 16px;font-family:${SANS};font-size:18px;color:#0f172a;">${escapeHtml(loc.email.autoreplyHeading)}</h1>
-${input.submitterName ? `<p style="margin:0 0 14px;font-family:${SANS};font-size:14px;line-height:1.9;color:#1e293b;">${escapeHtml(loc.email.greeting(input.submitterName))}</p>` : ""}
-<p style="margin:0 0 18px;font-family:${SANS};font-size:14px;line-height:1.9;color:#1e293b;">${loc.email.autoreplyBodyHtml}</p>
-${input.message ? `<p style="margin:0 0 6px;font-family:${SANS};font-size:13px;font-weight:bold;color:${accent};">${escapeHtml(loc.email.inquiryContentLabel)}</p>${messageBox(input.message)}` : ""}
+<h1 style="margin:0 0 16px;font-family:${font};font-size:18px;color:#0f172a;">${escapeHtml(loc.email.autoreplyHeading)}</h1>
+${input.submitterName ? `<p style="margin:0 0 14px;font-family:${font};font-size:14px;line-height:1.9;color:#1e293b;">${escapeHtml(loc.email.greeting(input.submitterName))}</p>` : ""}
+<p style="margin:0 0 18px;font-family:${font};font-size:14px;line-height:1.9;color:#1e293b;">${loc.email.autoreplyBodyHtml}</p>
+${input.message ? `<p style="margin:0 0 6px;font-family:${font};font-size:13px;font-weight:bold;color:${accent};">${escapeHtml(loc.email.inquiryContentLabel)}</p>${messageBox(font, input.message)}` : ""}
 </td></tr>`;
   }
   const pre =

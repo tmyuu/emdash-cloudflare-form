@@ -44,6 +44,7 @@ const K = {
   orgName: "settings:orgName",
   logoUrl: "settings:logoUrl",
   brandColor: "settings:brandColor",
+  fontFamily: "settings:fontFamily",
   footer: "settings:footer",
   siteUrl: "settings:siteUrl",
   fromAddress: "settings:fromAddress",
@@ -158,6 +159,7 @@ async function loadConfig(ctx: PluginContext): Promise<Config> {
       orgName: await getStr(ctx, K.orgName, loc.defaults.orgName),
       logoUrl: await getStr(ctx, K.logoUrl),
       brandColor: await getStr(ctx, K.brandColor, "#1675b9"),
+      fontFamily: await getStr(ctx, K.fontFamily),
       footer: await getStr(ctx, K.footer),
       siteUrl: await getStr(ctx, K.siteUrl),
     },
@@ -326,6 +328,12 @@ async function buildSettingsPage(ctx: PluginContext) {
         text: t.settingsIntro,
       },
       {
+        // secret_input can't display its stored value, so surface whether
+        // the Turnstile secret is configured at all.
+        type: "section",
+        text: cfg.turnstileSecret ? t.turnstileStatusSet : t.turnstileStatusMissing,
+      },
+      {
         type: "form",
         submit: { label: t.saveButton, action_id: "save_settings" },
         fields: [
@@ -339,6 +347,7 @@ async function buildSettingsPage(ctx: PluginContext) {
           { type: "text_input", action_id: "orgName", label: t.orgNameLabel, placeholder: t.orgNamePlaceholder, initial_value: cfg.brand.orgName },
           { type: "text_input", action_id: "logoUrl", label: t.logoUrlLabel, placeholder: t.logoUrlPlaceholder, initial_value: cfg.brand.logoUrl ?? "" },
           { type: "text_input", action_id: "brandColor", label: t.brandColorLabel, placeholder: t.brandColorPlaceholder, initial_value: cfg.brand.brandColor },
+          { type: "text_input", action_id: "fontFamily", label: t.fontFamilyLabel, placeholder: t.fontFamilyPlaceholder, initial_value: cfg.brand.fontFamily ?? "" },
           { type: "text_input", action_id: "footer", label: t.footerLabel, placeholder: t.footerPlaceholder, multiline: true, initial_value: cfg.brand.footer ?? "" },
           { type: "text_input", action_id: "siteUrl", label: t.siteUrlLabel, placeholder: t.siteUrlPlaceholder, initial_value: cfg.brand.siteUrl ?? "" },
           { type: "text_input", action_id: "fromAddress", label: t.fromAddressLabel, placeholder: t.fromAddressPlaceholder, initial_value: cfg.from, required: true },
@@ -375,6 +384,9 @@ async function saveSettings(ctx: PluginContext, values: Record<string, unknown>)
     if (typeof values.fromAddress === "string" && !parseFrom(values.fromAddress)) {
       return { ...(await buildSettingsPage(ctx)), toast: { message: t.toastInvalidFrom, type: "error" } };
     }
+    if (typeof values.fontFamily === "string" && /[<>"{};\\]/.test(values.fontFamily)) {
+      return { ...(await buildSettingsPage(ctx)), toast: { message: t.toastInvalidFont, type: "error" } };
+    }
     if (typeof values.fields === "string" && values.fields.trim()) {
       try {
         const p = JSON.parse(values.fields);
@@ -387,6 +399,7 @@ async function saveSettings(ctx: PluginContext, values: Record<string, unknown>)
     await setStr(K.orgName, values.orgName);
     await setStr(K.logoUrl, values.logoUrl);
     await setStr(K.brandColor, values.brandColor);
+    await setStr(K.fontFamily, values.fontFamily);
     await setStr(K.footer, values.footer);
     await setStr(K.siteUrl, values.siteUrl);
     await setStr(K.fromAddress, values.fromAddress);

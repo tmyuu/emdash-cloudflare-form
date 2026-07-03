@@ -55,6 +55,8 @@ export interface AdminMessages {
   logoUrlPlaceholder: string;
   brandColorLabel: string;
   brandColorPlaceholder: string;
+  fontFamilyLabel: string;
+  fontFamilyPlaceholder: string;
   footerLabel: string;
   footerPlaceholder: string;
   siteUrlLabel: string;
@@ -83,6 +85,11 @@ export interface AdminMessages {
   toastSaveFailed: string;
   toastInvalidFrom: string;
   toastInvalidFields: string;
+  toastInvalidFont: string;
+
+  /** Status line for the Turnstile secret (secret inputs can't show values). */
+  turnstileStatusSet: string;
+  turnstileStatusMissing: string;
 
   submissionsTitle: string;
   colReceivedAt: string;
@@ -146,6 +153,9 @@ const en: Locale = {
     logoUrlPlaceholder: "https://example.com/icon.png — PNG, absolute URL",
     brandColorLabel: "Brand color",
     brandColorPlaceholder: "#1675b9",
+    fontFamilyLabel: "Email font",
+    fontFamilyPlaceholder:
+      "CSS font-family list, e.g. 'Hiragino Mincho ProN','Yu Mincho',serif — email clients only use device fonts (web fonts are ignored). Blank = default sans stack",
     footerLabel: "Footer",
     footerPlaceholder: "Address, tel, etc. — line breaks allowed",
     siteUrlLabel: "Site URL",
@@ -174,6 +184,11 @@ const en: Locale = {
     toastSaveFailed: "Failed to save.",
     toastInvalidFrom: "From must be in the form name@domain or Name <name@domain>.",
     toastInvalidFields: "Field definitions are not valid JSON.",
+    toastInvalidFont: 'Email font must be a CSS font-family list (the characters <>"{};\\ are not allowed).',
+
+    turnstileStatusSet: "Turnstile secret key: configured.",
+    turnstileStatusMissing:
+      "Turnstile secret key: not configured — submissions are rejected until it is set.",
 
     submissionsTitle: "Form Submissions",
     colReceivedAt: "Received at",
@@ -239,6 +254,9 @@ const ja: Locale = {
     logoUrlPlaceholder: "https://example.com/icon.png ・PNG推奨・絶対URL",
     brandColorLabel: "ブランドカラー",
     brandColorPlaceholder: "#1675b9",
+    fontFamilyLabel: "メールフォント",
+    fontFamilyPlaceholder:
+      "CSSのfont-family形式。例: 'Hiragino Mincho ProN','Yu Mincho',serif ・メールでは端末フォントのみ有効（Webフォント不可）。空欄で既定のゴシック",
     footerLabel: "フッタ",
     footerPlaceholder: "住所・TEL など。改行できます",
     siteUrlLabel: "サイトURL",
@@ -267,6 +285,10 @@ const ja: Locale = {
     toastSaveFailed: "保存に失敗しました",
     toastInvalidFrom: "From は name@domain か Name <name@domain> 形式で入力してください",
     toastInvalidFields: "フィールド定義が不正なJSONです",
+    toastInvalidFont: 'メールフォントは CSS の font-family 形式で入力してください（<>"{};\\ は使用できません）',
+
+    turnstileStatusSet: "Turnstile シークレットキー: 設定済み",
+    turnstileStatusMissing: "Turnstile シークレットキー: 未設定 — 設定するまでフォーム送信は受け付けられません",
 
     submissionsTitle: "お問い合わせ送信履歴",
     colReceivedAt: "受信日時",

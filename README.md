@@ -70,9 +70,15 @@ Deploy, then open **EmDash admin → Contact Form**:
 - **Language** — `English` / `日本語`. Drives the admin UI and the
   customer-facing output (default fields, subjects, confirmation, email text).
 - **Org name / Logo URL / Brand colour / Footer** — email branding.
+- **Email font** — CSS `font-family` list used throughout the emails
+  (e.g. `'Hiragino Mincho ProN','Yu Mincho',serif`). Email clients ignore
+  web fonts, so this reorders system-font fallbacks; blank = the default
+  Japanese-safe sans stack.
 - **From Address** — `Your Co <noreply@yourdomain.com>` (onboarded domain).
 - **Notify recipients** — where submissions are sent (comma/newline separated).
-- **Turnstile site key + secret key**.
+- **Turnstile site key + secret key** — a status line above the form shows
+  whether the secret is currently configured (secret fields never display
+  their stored value).
 - **Auto-reply** toggle + subject.
 - **Fields** — JSON array of field definitions (defaults provided).
 - **Template** — which HTML design to use.
