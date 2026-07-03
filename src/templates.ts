@@ -301,6 +301,12 @@ function customVars(input: RenderInput): TemplateScope {
     brandColor: brand.brandColor || "#1675b9",
     fontFamily: font,
     footer: brand.footer ?? "",
+    // Footer with newlines as <br>, each line pre-escaped — insert raw
+    // with {{{footerHtml}}} (mirrors how the built-in templates render it).
+    footerHtml: (brand.footer ?? "")
+      .split("\n")
+      .map((l) => escapeHtml(l))
+      .join("<br>"),
     siteUrl: brand.siteUrl ?? "",
     htmlLang: loc.email.htmlLang,
     autoFooterNote: loc.email.autoFooterNote,
