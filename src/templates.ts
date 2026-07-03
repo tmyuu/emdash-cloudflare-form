@@ -1,11 +1,13 @@
 /**
  * Branded HTML email templates for emdash-cloudflare-form.
  *
- * Templates are a registry keyed by id — add new entries to `TEMPLATES`
- * to offer more designs (selectable from the admin settings page via the
- * "Template" field). Each template renders both a notification (to the
- * site owner) and an auto-reply (to the submitter) from the same data,
- * so adding a form field automatically appears in the email.
+ * Two rendering paths:
+ *
+ *   - `branded` (default) — the built-in design below.
+ *   - custom — an admin-authored HTML (and optional plain-text) template
+ *     stored in settings and rendered by the small mustache-style engine at
+ *     the bottom of this file. This is how sites design their own emails;
+ *     see the README for the variable reference.
  *
  * All human-readable strings come from the active locale (`src/i18n.ts`),
  * selected by the runtime "Language" setting — no text is hard-coded here.
@@ -42,6 +44,8 @@ export interface RenderInput {
   brand: BrandConfig;
   /** Field label/value pairs in display order. */
   pairs: Array<{ label: string; value: string }>;
+  /** Submitted values keyed by field name (for `{{field.<name>}}` tokens). */
+  values?: Record<string, string>;
   /** Long-form body (e.g. the message field), rendered in its own box. */
   message?: string;
   /** Submitter display name (for the auto-reply greeting). */
@@ -149,12 +153,21 @@ ${input.submitterName ? `<p style="margin:0 0 14px;font-family:${font};font-size
 ${input.message ? `<p style="margin:0 0 6px;font-family:${font};font-size:13px;font-weight:bold;color:${accent};">${escapeHtml(loc.email.inquiryContentLabel)}</p>${messageBox(font, input.message)}` : ""}
 </td></tr>`;
   }
-  const pre =
-    input.kind === "notify"
-      ? `${input.category ?? ""} ${input.submitterName ?? ""}`.trim() || loc.email.preheaderNew
-      : loc.email.preheaderReceived;
+  const pre = preheaderOf(input);
   const html = shell(input.lang, input.brand, pre, inner);
+  return { html, text: plainText(input) };
+};
 
+function preheaderOf(input: RenderInput): string {
+  const loc = getLocale(input.lang);
+  return input.kind === "notify"
+    ? `${input.category ?? ""} ${input.submitterName ?? ""}`.trim() || loc.email.preheaderNew
+    : loc.email.preheaderReceived;
+}
+
+/** Plain-text body shared by all templates (text/plain alternative part). */
+function plainText(input: RenderInput): string {
+  const loc = getLocale(input.lang);
   const textLines: string[] = [];
   if (input.kind === "autoreply") {
     if (input.submitterName) textLines.push(loc.email.greeting(input.submitterName), "");
@@ -165,18 +178,168 @@ ${input.message ? `<p style="margin:0 0 6px;font-family:${font};font-size:13px;f
   for (const p of input.pairs) if (p.value) textLines.push(`■ ${p.label}: ${p.value}`);
   if (input.message) textLines.push("", `■ ${loc.email.inquiryContentLabel}:`, input.message);
   textLines.push("", "--", input.brand.orgName);
-  return { html, text: textLines.join("\n") };
-};
+  return textLines.join("\n");
+}
+
+// --- custom template (admin-authored) -----------------------------------------
+//
+// A minimal mustache-style engine so sites can design their own email HTML
+// from the settings page without touching plugin code:
+//
+//   {{name}}            variable, HTML-escaped (plain in the text template)
+//   {{{name}}}          variable, raw (for prebuilt HTML parts)
+//   {{#key}}...{{/key}} loop over an array (e.g. pairs) or render-if-truthy
+//   {{^key}}...{{/key}} render-if-falsy
+//
+// Rendering is single-pass over the template source: substituted values are
+// never re-scanned, so submitted form data containing `{{...}}` is inert.
+// Limitation (documented): a section cannot nest another section of the
+// same key.
+
+type TemplateScope = Record<string, unknown>;
+
+export interface CustomTemplate {
+  html: string;
+  /** Optional plain-text template; blank = the default text rendering. */
+  text?: string;
+}
+
+function lookupVar(stack: TemplateScope[], path: string): unknown {
+  for (let i = stack.length - 1; i >= 0; i--) {
+    let cur: unknown = stack[i];
+    for (const part of path.split(".")) {
+      if (cur !== null && typeof cur === "object" && part in (cur as TemplateScope)) {
+        cur = (cur as TemplateScope)[part];
+      } else {
+        cur = undefined;
+        break;
+      }
+    }
+    if (cur !== undefined) return cur;
+  }
+  return undefined;
+}
+
+function renderTemplateString(src: string, stack: TemplateScope[], escape: boolean): string {
+  let out = "";
+  let i = 0;
+  while (i < src.length) {
+    const open = src.indexOf("{{", i);
+    if (open === -1) {
+      out += src.slice(i);
+      break;
+    }
+    out += src.slice(i, open);
+
+    // {{{raw}}}
+    if (src.startsWith("{{{", open)) {
+      const close = src.indexOf("}}}", open + 3);
+      if (close === -1) {
+        out += src.slice(open);
+        break;
+      }
+      const v = lookupVar(stack, src.slice(open + 3, close).trim());
+      out += v == null ? "" : String(v);
+      i = close + 3;
+      continue;
+    }
+
+    const close = src.indexOf("}}", open + 2);
+    if (close === -1) {
+      out += src.slice(open);
+      break;
+    }
+    const tag = src.slice(open + 2, close).trim();
+
+    // {{#section}} / {{^inverted}}
+    if (tag.startsWith("#") || tag.startsWith("^")) {
+      const key = tag.slice(1).trim();
+      const endTag = `{{/${key}}}`;
+      const end = src.indexOf(endTag, close + 2);
+      if (end === -1) {
+        // Unclosed section: drop the tag and continue.
+        i = close + 2;
+        continue;
+      }
+      const inner = src.slice(close + 2, end);
+      const v = lookupVar(stack, key);
+      const truthy = Array.isArray(v) ? v.length > 0 : Boolean(v);
+      if (tag.startsWith("#")) {
+        if (Array.isArray(v)) {
+          for (const item of v) {
+            const scope = item !== null && typeof item === "object" ? (item as TemplateScope) : { ".": item };
+            out += renderTemplateString(inner, [...stack, scope], escape);
+          }
+        } else if (truthy) {
+          const scope = v !== null && typeof v === "object" ? [...stack, v as TemplateScope] : stack;
+          out += renderTemplateString(inner, scope, escape);
+        }
+      } else if (!truthy) {
+        out += renderTemplateString(inner, stack, escape);
+      }
+      i = end + endTag.length;
+      continue;
+    }
+
+    // {{variable}}
+    const v = lookupVar(stack, tag);
+    const s = v == null ? "" : String(v);
+    out += escape ? escapeHtml(s) : s;
+    i = close + 2;
+  }
+  return out;
+}
+
+/** Variables exposed to custom templates — see the README reference table. */
+function customVars(input: RenderInput): TemplateScope {
+  const loc = getLocale(input.lang);
+  const brand = input.brand;
+  const font = fontOf(brand);
+  return {
+    orgName: brand.orgName,
+    logoUrl: brand.logoUrl ?? "",
+    brandColor: brand.brandColor || "#1675b9",
+    fontFamily: font,
+    footer: brand.footer ?? "",
+    siteUrl: brand.siteUrl ?? "",
+    htmlLang: loc.email.htmlLang,
+    autoFooterNote: loc.email.autoFooterNote,
+    preheader: preheaderOf(input),
+    heading: input.kind === "notify" ? loc.email.notifyHeading : loc.email.autoreplyHeading,
+    greeting: input.submitterName ? loc.email.greeting(input.submitterName) : "",
+    autoreplyBodyHtml: loc.email.autoreplyBodyHtml,
+    inquiryContentLabel: loc.email.inquiryContentLabel,
+    category: input.category ?? "",
+    submitterName: input.submitterName ?? "",
+    message: input.message ?? "",
+    isNotify: input.kind === "notify",
+    isAutoreply: input.kind === "autoreply",
+    pairs: input.pairs.filter((p) => p.value),
+    field: input.values ?? {},
+    // Prebuilt parts (insert raw with {{{rows}}} / {{{messageBox}}}).
+    rows: rowsHtml(brand, input.pairs),
+    messageBox: input.message ? messageBox(font, input.message) : "",
+  };
+}
 
 export const TEMPLATES: Record<string, TemplateFn> = {
   branded,
-  // Add more designs here: e.g. minimal, card, ...
+  // Site-specific designs belong in the "custom" template (settings page),
+  // not here.
 };
 
 export function renderEmail(
   templateId: string | undefined,
   input: RenderInput,
+  custom?: CustomTemplate,
 ): { html: string; text: string } {
+  if (templateId === "custom" && custom?.html.trim()) {
+    const vars = customVars(input);
+    return {
+      html: renderTemplateString(custom.html, [vars], true),
+      text: custom.text?.trim() ? renderTemplateString(custom.text, [vars], false) : plainText(input),
+    };
+  }
   const fn = (templateId && TEMPLATES[templateId]) || branded;
   return fn(input);
 }

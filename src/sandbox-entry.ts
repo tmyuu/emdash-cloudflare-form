@@ -56,6 +56,8 @@ const K = {
   notifySubject: "settings:notifySubject",
   autoresponderSubject: "settings:autoresponderSubject",
   template: "settings:template",
+  customHtml: "settings:customHtml",
+  customText: "settings:customText",
   confirmMessage: "settings:confirmMessage",
   fields: "settings:fields",
 } as const;
@@ -146,6 +148,8 @@ interface Config {
   notifySubject: string;
   autoresponderSubject: string;
   template: string;
+  customHtml: string;
+  customText: string;
   confirmMessage: string;
   fields: FieldDef[];
 }
@@ -172,6 +176,8 @@ async function loadConfig(ctx: PluginContext): Promise<Config> {
     notifySubject: await getStr(ctx, K.notifySubject, loc.defaults.notifySubject),
     autoresponderSubject: await getStr(ctx, K.autoresponderSubject, loc.defaults.autoresponderSubject),
     template: await getStr(ctx, K.template, "branded"),
+    customHtml: await getStr(ctx, K.customHtml),
+    customText: await getStr(ctx, K.customText),
     confirmMessage: await getStr(ctx, K.confirmMessage),
     fields: parseFields(await getStr(ctx, K.fields), lang),
   };
@@ -269,7 +275,11 @@ async function handleSubmit(routeCtx: SandboxedRouteContext, ctx: PluginContext)
 
   // notification to site owner(s) — required
   try {
-    const mail = renderEmail(cfg.template, { kind: "notify", lang: cfg.lang, brand: cfg.brand, pairs, message, submitterName, category });
+    const mail = renderEmail(
+      cfg.template,
+      { kind: "notify", lang: cfg.lang, brand: cfg.brand, pairs, values, message, submitterName, category },
+      { html: cfg.customHtml, text: cfg.customText },
+    );
     await binding.send({
       // 宛先は文字列（配列）が許容される。オブジェクトで渡す場合は name が必須になるため
       // 表示名を持たない宛先はプレーンな文字列のまま渡す
@@ -288,7 +298,11 @@ async function handleSubmit(routeCtx: SandboxedRouteContext, ctx: PluginContext)
   // auto-reply to submitter — best-effort
   if (cfg.autoresponder && submitterEmail) {
     try {
-      const mail = renderEmail(cfg.template, { kind: "autoreply", lang: cfg.lang, brand: cfg.brand, pairs, message, submitterName, category });
+      const mail = renderEmail(
+        cfg.template,
+        { kind: "autoreply", lang: cfg.lang, brand: cfg.brand, pairs, values, message, submitterName, category },
+        { html: cfg.customHtml, text: cfg.customText },
+      );
       await binding.send({
         to: submitterEmail,
         from,
@@ -358,7 +372,9 @@ async function buildSettingsPage(ctx: PluginContext) {
           { type: "text_input", action_id: "notifySubject", label: t.notifySubjectLabel, placeholder: t.notifySubjectPlaceholder, initial_value: cfg.notifySubject },
           { type: "toggle", action_id: "autoresponder", label: t.autoresponderLabel, initial_value: cfg.autoresponder },
           { type: "text_input", action_id: "autoresponderSubject", label: t.autoresponderSubjectLabel, initial_value: cfg.autoresponderSubject },
-          { type: "select", action_id: "template", label: t.templateLabel, initial_value: cfg.template, options: [{ value: "branded", label: t.templateBrandedOption }] },
+          { type: "select", action_id: "template", label: t.templateLabel, initial_value: cfg.template === "custom" ? "custom" : "branded", options: [{ value: "branded", label: t.templateBrandedOption }, { value: "custom", label: t.templateCustomOption }] },
+          { type: "text_input", action_id: "customHtml", label: t.customHtmlLabel, placeholder: t.customHtmlPlaceholder, multiline: true, initial_value: cfg.customHtml },
+          { type: "text_input", action_id: "customText", label: t.customTextLabel, placeholder: t.customTextPlaceholder, multiline: true, initial_value: cfg.customText },
           { type: "text_input", action_id: "confirmMessage", label: t.confirmMessageLabel, placeholder: t.confirmMessagePlaceholder, multiline: true, initial_value: cfg.confirmMessage },
           { type: "text_input", action_id: "fields", label: t.fieldsLabel, placeholder: t.fieldsPlaceholder, multiline: true, initial_value: JSON.stringify(cfg.fields, null, 2) },
         ],
@@ -409,6 +425,8 @@ async function saveSettings(ctx: PluginContext, values: Record<string, unknown>)
     await setStr(K.notifySubject, values.notifySubject);
     await setStr(K.autoresponderSubject, values.autoresponderSubject);
     await setStr(K.template, values.template);
+    await setStr(K.customHtml, values.customHtml);
+    await setStr(K.customText, values.customText);
     await setStr(K.confirmMessage, values.confirmMessage);
     await setStr(K.fields, values.fields);
     // toggle → "1" / ""

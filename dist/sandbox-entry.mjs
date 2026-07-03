@@ -43,6 +43,11 @@ const LOCALES = {
 			autoresponderSubjectLabel: "Auto-reply subject",
 			templateLabel: "Email template",
 			templateBrandedOption: "Branded",
+			templateCustomOption: "Custom (designed below)",
+			customHtmlLabel: "Custom HTML template",
+			customHtmlPlaceholder: "Used when Template = Custom. Tokens: {{orgName}} {{heading}} {{greeting}} {{message}} {{field.<name>}} / loop {{#pairs}}{{label}} {{value}}{{/pairs}} / branch {{#isNotify}}…{{/isNotify}} {{#isAutoreply}}…{{/isAutoreply}} / prebuilt parts {{{rows}}} {{{messageBox}}}. Full reference in the README.",
+			customTextLabel: "Custom plain-text template",
+			customTextPlaceholder: "Optional — same tokens, no HTML escaping. Blank = the default text version.",
 			confirmMessageLabel: "Confirmation message",
 			confirmMessagePlaceholder: "Optional — shown after a successful submission",
 			fieldsLabel: "Field definitions",
@@ -166,6 +171,11 @@ const LOCALES = {
 			autoresponderSubjectLabel: "自動返信の件名",
 			templateLabel: "メールテンプレート",
 			templateBrandedOption: "Branded",
+			templateCustomOption: "カスタム（下で自由に設計）",
+			customHtmlLabel: "カスタムHTMLテンプレート",
+			customHtmlPlaceholder: "テンプレートで「カスタム」選択時に使用。トークン: {{orgName}} {{heading}} {{greeting}} {{message}} {{field.<name>}} ／ ループ {{#pairs}}{{label}} {{value}}{{/pairs}} ／ 分岐 {{#isNotify}}…{{/isNotify}} {{#isAutoreply}}…{{/isAutoreply}} ／ 既製パーツ {{{rows}}} {{{messageBox}}}。詳細はREADME参照。",
+			customTextLabel: "カスタムテキストテンプレート",
+			customTextPlaceholder: "任意。同じトークンが使えます（HTMLエスケープなし）。空欄なら既定のテキスト版を使用。",
 			confirmMessageLabel: "送信完了メッセージ",
 			confirmMessagePlaceholder: "任意。送信成功後に表示されます",
 			fieldsLabel: "フィールド定義",
@@ -336,8 +346,19 @@ ${input.submitterName ? `<p style="margin:0 0 14px;font-family:${font};font-size
 <p style="margin:0 0 18px;font-family:${font};font-size:14px;line-height:1.9;color:#1e293b;">${loc.email.autoreplyBodyHtml}</p>
 ${input.message ? `<p style="margin:0 0 6px;font-family:${font};font-size:13px;font-weight:bold;color:${accent};">${escapeHtml(loc.email.inquiryContentLabel)}</p>${messageBox(font, input.message)}` : ""}
 </td></tr>`;
-	const pre = input.kind === "notify" ? `${input.category ?? ""} ${input.submitterName ?? ""}`.trim() || loc.email.preheaderNew : loc.email.preheaderReceived;
-	const html = shell(input.lang, input.brand, pre, inner);
+	const pre = preheaderOf(input);
+	return {
+		html: shell(input.lang, input.brand, pre, inner),
+		text: plainText(input)
+	};
+};
+function preheaderOf(input) {
+	const loc = getLocale(input.lang);
+	return input.kind === "notify" ? `${input.category ?? ""} ${input.submitterName ?? ""}`.trim() || loc.email.preheaderNew : loc.email.preheaderReceived;
+}
+/** Plain-text body shared by all templates (text/plain alternative part). */
+function plainText(input) {
+	const loc = getLocale(input.lang);
 	const textLines = [];
 	if (input.kind === "autoreply") {
 		if (input.submitterName) textLines.push(loc.email.greeting(input.submitterName), "");
@@ -346,13 +367,116 @@ ${input.message ? `<p style="margin:0 0 6px;font-family:${font};font-size:13px;f
 	for (const p of input.pairs) if (p.value) textLines.push(`■ ${p.label}: ${p.value}`);
 	if (input.message) textLines.push("", `■ ${loc.email.inquiryContentLabel}:`, input.message);
 	textLines.push("", "--", input.brand.orgName);
+	return textLines.join("\n");
+}
+function lookupVar(stack, path) {
+	for (let i = stack.length - 1; i >= 0; i--) {
+		let cur = stack[i];
+		for (const part of path.split(".")) if (cur !== null && typeof cur === "object" && part in cur) cur = cur[part];
+		else {
+			cur = void 0;
+			break;
+		}
+		if (cur !== void 0) return cur;
+	}
+}
+function renderTemplateString(src, stack, escape) {
+	let out = "";
+	let i = 0;
+	while (i < src.length) {
+		const open = src.indexOf("{{", i);
+		if (open === -1) {
+			out += src.slice(i);
+			break;
+		}
+		out += src.slice(i, open);
+		if (src.startsWith("{{{", open)) {
+			const close = src.indexOf("}}}", open + 3);
+			if (close === -1) {
+				out += src.slice(open);
+				break;
+			}
+			const v = lookupVar(stack, src.slice(open + 3, close).trim());
+			out += v == null ? "" : String(v);
+			i = close + 3;
+			continue;
+		}
+		const close = src.indexOf("}}", open + 2);
+		if (close === -1) {
+			out += src.slice(open);
+			break;
+		}
+		const tag = src.slice(open + 2, close).trim();
+		if (tag.startsWith("#") || tag.startsWith("^")) {
+			const key = tag.slice(1).trim();
+			const endTag = `{{/${key}}}`;
+			const end = src.indexOf(endTag, close + 2);
+			if (end === -1) {
+				i = close + 2;
+				continue;
+			}
+			const inner = src.slice(close + 2, end);
+			const v = lookupVar(stack, key);
+			const truthy = Array.isArray(v) ? v.length > 0 : Boolean(v);
+			if (tag.startsWith("#")) {
+				if (Array.isArray(v)) for (const item of v) {
+					const scope = item !== null && typeof item === "object" ? item : { ".": item };
+					out += renderTemplateString(inner, [...stack, scope], escape);
+				}
+				else if (truthy) {
+					const scope = v !== null && typeof v === "object" ? [...stack, v] : stack;
+					out += renderTemplateString(inner, scope, escape);
+				}
+			} else if (!truthy) out += renderTemplateString(inner, stack, escape);
+			i = end + endTag.length;
+			continue;
+		}
+		const v = lookupVar(stack, tag);
+		const s = v == null ? "" : String(v);
+		out += escape ? escapeHtml(s) : s;
+		i = close + 2;
+	}
+	return out;
+}
+/** Variables exposed to custom templates — see the README reference table. */
+function customVars(input) {
+	const loc = getLocale(input.lang);
+	const brand = input.brand;
+	const font = fontOf(brand);
 	return {
-		html,
-		text: textLines.join("\n")
+		orgName: brand.orgName,
+		logoUrl: brand.logoUrl ?? "",
+		brandColor: brand.brandColor || "#1675b9",
+		fontFamily: font,
+		footer: brand.footer ?? "",
+		siteUrl: brand.siteUrl ?? "",
+		htmlLang: loc.email.htmlLang,
+		autoFooterNote: loc.email.autoFooterNote,
+		preheader: preheaderOf(input),
+		heading: input.kind === "notify" ? loc.email.notifyHeading : loc.email.autoreplyHeading,
+		greeting: input.submitterName ? loc.email.greeting(input.submitterName) : "",
+		autoreplyBodyHtml: loc.email.autoreplyBodyHtml,
+		inquiryContentLabel: loc.email.inquiryContentLabel,
+		category: input.category ?? "",
+		submitterName: input.submitterName ?? "",
+		message: input.message ?? "",
+		isNotify: input.kind === "notify",
+		isAutoreply: input.kind === "autoreply",
+		pairs: input.pairs.filter((p) => p.value),
+		field: input.values ?? {},
+		rows: rowsHtml(brand, input.pairs),
+		messageBox: input.message ? messageBox(font, input.message) : ""
 	};
-};
+}
 const TEMPLATES = { branded };
-function renderEmail(templateId, input) {
+function renderEmail(templateId, input, custom) {
+	if (templateId === "custom" && custom?.html.trim()) {
+		const vars = customVars(input);
+		return {
+			html: renderTemplateString(custom.html, [vars], true),
+			text: custom.text?.trim() ? renderTemplateString(custom.text, [vars], false) : plainText(input)
+		};
+	}
 	return (templateId && TEMPLATES[templateId] || branded)(input);
 }
 //#endregion
@@ -377,6 +501,8 @@ const K = {
 	notifySubject: "settings:notifySubject",
 	autoresponderSubject: "settings:autoresponderSubject",
 	template: "settings:template",
+	customHtml: "settings:customHtml",
+	customText: "settings:customText",
 	confirmMessage: "settings:confirmMessage",
 	fields: "settings:fields"
 };
@@ -446,6 +572,8 @@ async function loadConfig(ctx) {
 		notifySubject: await getStr(ctx, K.notifySubject, loc.defaults.notifySubject),
 		autoresponderSubject: await getStr(ctx, K.autoresponderSubject, loc.defaults.autoresponderSubject),
 		template: await getStr(ctx, K.template, "branded"),
+		customHtml: await getStr(ctx, K.customHtml),
+		customText: await getStr(ctx, K.customText),
 		confirmMessage: await getStr(ctx, K.confirmMessage),
 		fields: parseFields(await getStr(ctx, K.fields), lang)
 	};
@@ -539,9 +667,13 @@ async function handleSubmit(routeCtx, ctx) {
 			lang: cfg.lang,
 			brand: cfg.brand,
 			pairs,
+			values,
 			message,
 			submitterName,
 			category
+		}, {
+			html: cfg.customHtml,
+			text: cfg.customText
 		});
 		await binding.send({
 			to: cfg.toEmails,
@@ -564,9 +696,13 @@ async function handleSubmit(routeCtx, ctx) {
 			lang: cfg.lang,
 			brand: cfg.brand,
 			pairs,
+			values,
 			message,
 			submitterName,
 			category
+		}, {
+			html: cfg.customHtml,
+			text: cfg.customText
 		});
 		await binding.send({
 			to: submitterEmail,
@@ -729,11 +865,30 @@ async function buildSettingsPage(ctx) {
 					type: "select",
 					action_id: "template",
 					label: t.templateLabel,
-					initial_value: cfg.template,
+					initial_value: cfg.template === "custom" ? "custom" : "branded",
 					options: [{
 						value: "branded",
 						label: t.templateBrandedOption
+					}, {
+						value: "custom",
+						label: t.templateCustomOption
 					}]
+				},
+				{
+					type: "text_input",
+					action_id: "customHtml",
+					label: t.customHtmlLabel,
+					placeholder: t.customHtmlPlaceholder,
+					multiline: true,
+					initial_value: cfg.customHtml
+				},
+				{
+					type: "text_input",
+					action_id: "customText",
+					label: t.customTextLabel,
+					placeholder: t.customTextPlaceholder,
+					multiline: true,
+					initial_value: cfg.customText
 				},
 				{
 					type: "text_input",
@@ -803,6 +958,8 @@ async function saveSettings(ctx, values) {
 		await setStr(K.notifySubject, values.notifySubject);
 		await setStr(K.autoresponderSubject, values.autoresponderSubject);
 		await setStr(K.template, values.template);
+		await setStr(K.customHtml, values.customHtml);
+		await setStr(K.customText, values.customText);
 		await setStr(K.confirmMessage, values.confirmMessage);
 		await setStr(K.fields, values.fields);
 		if (values.autoresponder === true) await ctx.kv.set(K.autoresponder, "1");
