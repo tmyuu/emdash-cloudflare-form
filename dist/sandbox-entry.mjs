@@ -43,6 +43,7 @@ const LOCALES = {
 			autoresponderSubjectLabel: "Auto-reply subject",
 			templateLabel: "Email template",
 			templateBrandedOption: "Branded",
+			templateEditorialOption: "Editorial (whitespace, hairline rules)",
 			templateElegantOption: "Elegant (serif & hairline rules)",
 			confirmMessageLabel: "Confirmation message",
 			confirmMessagePlaceholder: "Optional — shown after a successful submission",
@@ -167,6 +168,7 @@ const LOCALES = {
 			autoresponderSubjectLabel: "自動返信の件名",
 			templateLabel: "メールテンプレート",
 			templateBrandedOption: "Branded",
+			templateEditorialOption: "Editorial（余白・ヘアライン基調）",
 			templateElegantOption: "Elegant（明朝・罫線基調）",
 			confirmMessageLabel: "送信完了メッセージ",
 			confirmMessagePlaceholder: "任意。送信成功後に表示されます",
@@ -339,7 +341,14 @@ ${input.submitterName ? `<p style="margin:0 0 14px;font-family:${font};font-size
 ${input.message ? `<p style="margin:0 0 6px;font-family:${font};font-size:13px;font-weight:bold;color:${accent};">${escapeHtml(loc.email.inquiryContentLabel)}</p>${messageBox(font, input.message)}` : ""}
 </td></tr>`;
 	const pre = input.kind === "notify" ? `${input.category ?? ""} ${input.submitterName ?? ""}`.trim() || loc.email.preheaderNew : loc.email.preheaderReceived;
-	const html = shell(input.lang, input.brand, pre, inner);
+	return {
+		html: shell(input.lang, input.brand, pre, inner),
+		text: plainText(input)
+	};
+};
+/** Plain-text body shared by all templates (text/plain alternative part). */
+function plainText(input) {
+	const loc = getLocale(input.lang);
 	const textLines = [];
 	if (input.kind === "autoreply") {
 		if (input.submitterName) textLines.push(loc.email.greeting(input.submitterName), "");
@@ -348,9 +357,83 @@ ${input.message ? `<p style="margin:0 0 6px;font-family:${font};font-size:13px;f
 	for (const p of input.pairs) if (p.value) textLines.push(`■ ${p.label}: ${p.value}`);
 	if (input.message) textLines.push("", `■ ${loc.email.inquiryContentLabel}:`, input.message);
 	textLines.push("", "--", input.brand.orgName);
+	return textLines.join("\n");
+}
+const HAIRLINE = "#e5e5e5";
+const INK = "#1a1a1a";
+const MUTED = "#8a8a8a";
+/** Kicker line: small accent dot + muted label (the site's eyebrow pattern). */
+function editorialKicker(accent, font, label) {
+	return `<p style="margin:0 0 14px;font-family:${font};font-size:11px;color:${MUTED};">
+<span style="display:inline-block;width:6px;height:6px;border-radius:6px;background:${accent};vertical-align:middle;margin-right:8px;"></span><span style="vertical-align:middle;">${escapeHtml(label)}</span>
+</p>`;
+}
+function editorialShell(lang, brand, preheader, inner) {
+	const loc = getLocale(lang);
+	const accent = brand.brandColor || "#1675b9";
+	const font = fontOf(brand);
+	const logo = brand.logoUrl ? `<img src="${escapeHtml(brand.logoUrl)}" width="24" height="24" alt="" style="display:inline-block;vertical-align:middle;border:0;background:#ffffff;" />` : "";
+	const footerLines = (brand.footer || "").split("\n").map((l) => escapeHtml(l)).join("<br>");
+	const siteLink = brand.siteUrl ? `<br><a href="${escapeHtml(brand.siteUrl)}" style="color:${accent};text-decoration:none;">${escapeHtml(brand.siteUrl.replace(/^https?:\/\//, ""))}</a>` : "";
+	return `<!doctype html><html lang="${escapeHtml(loc.email.htmlLang)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#fafafa;">
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:#fafafa;">${escapeHtml(preheader)}</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#fafafa;padding:32px 0;">
+<tr><td align="center">
+<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:600px;max-width:600px;background:#ffffff;border:1px solid ${HAIRLINE};">
+<tr><td style="padding:22px 36px;border-bottom:1px solid ${HAIRLINE};">
+${logo}<span style="display:inline-block;vertical-align:middle;margin-left:${logo ? "10px" : "0"};color:#111111;font-family:${font};font-size:15px;font-weight:bold;">${escapeHtml(brand.orgName)}</span>
+</td></tr>
+${inner}
+<tr><td style="padding:22px 36px 28px;border-top:1px solid ${HAIRLINE};color:${MUTED};font-family:${font};font-size:12px;line-height:1.9;">
+${footerLines}${siteLink}<br>${escapeHtml(loc.email.autoFooterNote)}
+</td></tr>
+</table>
+</td></tr></table></body></html>`;
+}
+/** Definition-list rows: muted labels, neutral hairlines, no cell fills. */
+function editorialRows(brand, pairs) {
+	const font = fontOf(brand);
+	return pairs.filter((p) => p.value).map((p) => `<tr>
+<td style="padding:14px 24px 14px 0;color:${MUTED};font-family:${font};font-size:12px;white-space:nowrap;vertical-align:top;border-bottom:1px solid ${HAIRLINE};">${escapeHtml(p.label)}</td>
+<td style="padding:14px 0;color:${INK};font-family:${font};font-size:14px;line-height:1.8;border-bottom:1px solid ${HAIRLINE};word-break:break-all;">${escapeHtml(p.value)}</td>
+</tr>`).join("");
+}
+/** Message section: hairline separator + muted label + bare text. No box. */
+function editorialMessage(brand, label, message) {
+	const font = fontOf(brand);
+	return `<p style="margin:26px 0 10px;font-family:${font};font-size:12px;color:${MUTED};">${escapeHtml(label)}</p>
+<p style="margin:0;font-family:${font};font-size:14px;line-height:1.9;color:${INK};white-space:pre-wrap;">${escapeHtml(message)}</p>`;
+}
+/**
+* Editorial design (#13): whitespace + neutral hairlines, sans type via the
+* fontFamily setting, accent colour confined to a small dot and the footer
+* link. No boxes, no fills, no coloured rules.
+*/
+const editorial = (input) => {
+	const loc = getLocale(input.lang);
+	const accent = input.brand.brandColor || "#1675b9";
+	const font = fontOf(input.brand);
+	let inner;
+	if (input.kind === "notify") {
+		const sub = input.category ? loc.email.notifySubLabel(input.category, input.submitterName ?? "") : "";
+		inner = `<tr><td style="padding:30px 36px 34px;">
+${editorialKicker(accent, font, loc.email.notifyHeading)}
+${sub ? `<h1 style="margin:0 0 24px;font-family:${font};font-size:19px;font-weight:bold;color:#111111;">${escapeHtml(sub)}</h1>` : ""}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;border-top:1px solid ${HAIRLINE};">${editorialRows(input.brand, input.pairs)}</table>
+${input.message ? editorialMessage(input.brand, loc.email.inquiryContentLabel, input.message) : ""}
+</td></tr>`;
+	} else inner = `<tr><td style="padding:30px 36px 34px;">
+${editorialKicker(accent, font, loc.email.preheaderReceived)}
+<h1 style="margin:0 0 18px;font-family:${font};font-size:19px;font-weight:bold;color:#111111;">${escapeHtml(loc.email.autoreplyHeading)}</h1>
+${input.submitterName ? `<p style="margin:0 0 14px;font-family:${font};font-size:14px;line-height:1.9;color:${INK};">${escapeHtml(loc.email.greeting(input.submitterName))}</p>` : ""}
+<p style="margin:0;font-family:${font};font-size:14px;line-height:1.9;color:${INK};">${loc.email.autoreplyBodyHtml}</p>
+${input.message ? `<div style="margin-top:26px;border-top:1px solid ${HAIRLINE};"></div>${editorialMessage(input.brand, loc.email.inquiryContentLabel, input.message)}` : ""}
+</td></tr>`;
+	const pre = input.kind === "notify" ? `${input.category ?? ""} ${input.submitterName ?? ""}`.trim() || loc.email.preheaderNew : loc.email.preheaderReceived;
 	return {
-		html,
-		text: textLines.join("\n")
+		html: editorialShell(input.lang, input.brand, pre, inner),
+		text: plainText(input)
 	};
 };
 /**
@@ -424,6 +507,7 @@ ${footerLines}${siteLink}<br>${escapeHtml(loc.email.autoFooterNote)}
 };
 const TEMPLATES = {
 	branded,
+	editorial,
 	elegant
 };
 function renderEmail(templateId, input) {
@@ -804,13 +888,20 @@ async function buildSettingsPage(ctx) {
 					action_id: "template",
 					label: t.templateLabel,
 					initial_value: cfg.template,
-					options: [{
-						value: "branded",
-						label: t.templateBrandedOption
-					}, {
-						value: "elegant",
-						label: t.templateElegantOption
-					}]
+					options: [
+						{
+							value: "branded",
+							label: t.templateBrandedOption
+						},
+						{
+							value: "editorial",
+							label: t.templateEditorialOption
+						},
+						{
+							value: "elegant",
+							label: t.templateElegantOption
+						}
+					]
 				},
 				{
 					type: "text_input",

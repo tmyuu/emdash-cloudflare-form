@@ -81,7 +81,11 @@ Deploy, then open **EmDash admin → Contact Form**:
   their stored value).
 - **Auto-reply** toggle + subject.
 - **Fields** — JSON array of field definitions (defaults provided).
-- **Template** — which HTML design to use.
+- **Template** — which HTML design to use:
+  - `branded` (default) — solid colour header band + tinted label cells.
+  - `editorial` — whitespace and neutral 1px hairlines, no fills or boxes,
+    sharp edges; the brand colour appears only as a small dot accent and the
+    footer link. Type follows the **Email font** setting. Works for any site.
 
 ### 3. Point your form at the submit endpoint
 

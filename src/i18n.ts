@@ -76,6 +76,7 @@ export interface AdminMessages {
   autoresponderSubjectLabel: string;
   templateLabel: string;
   templateBrandedOption: string;
+  templateEditorialOption: string;
   templateElegantOption: string;
   confirmMessageLabel: string;
   confirmMessagePlaceholder: string;
@@ -176,6 +177,7 @@ const en: Locale = {
     autoresponderSubjectLabel: "Auto-reply subject",
     templateLabel: "Email template",
     templateBrandedOption: "Branded",
+    templateEditorialOption: "Editorial (whitespace, hairline rules)",
     templateElegantOption: "Elegant (serif & hairline rules)",
     confirmMessageLabel: "Confirmation message",
     confirmMessagePlaceholder: "Optional — shown after a successful submission",
@@ -278,6 +280,7 @@ const ja: Locale = {
     autoresponderSubjectLabel: "自動返信の件名",
     templateLabel: "メールテンプレート",
     templateBrandedOption: "Branded",
+    templateEditorialOption: "Editorial（余白・ヘアライン基調）",
     templateElegantOption: "Elegant（明朝・罫線基調）",
     confirmMessageLabel: "送信完了メッセージ",
     confirmMessagePlaceholder: "任意。送信成功後に表示されます",
