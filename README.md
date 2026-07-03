@@ -133,6 +133,7 @@ Variables:
 | Variable | Content |
 |---|---|
 | `{{orgName}}` `{{logoUrl}}` `{{brandColor}}` `{{footer}}` `{{siteUrl}}` | Branding settings |
+| `{{{footerHtml}}}` | Footer with newlines converted to `<br>` (lines pre-escaped — insert raw) |
 | `{{fontFamily}}` | The **Email font** setting (or the default stack) |
 | `{{heading}}` | Locale heading for the current email kind |
 | `{{greeting}}` | Localized greeting line (empty without a submitter name) |

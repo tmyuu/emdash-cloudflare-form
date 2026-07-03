@@ -449,6 +449,7 @@ function customVars(input) {
 		brandColor: brand.brandColor || "#1675b9",
 		fontFamily: font,
 		footer: brand.footer ?? "",
+		footerHtml: (brand.footer ?? "").split("\n").map((l) => escapeHtml(l)).join("<br>"),
 		siteUrl: brand.siteUrl ?? "",
 		htmlLang: loc.email.htmlLang,
 		autoFooterNote: loc.email.autoFooterNote,

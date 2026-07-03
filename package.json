@@ -1,6 +1,6 @@
 {
   "name": "emdash-cloudflare-form",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "EmDash CMS plugin: a contact/inquiry form backend with Cloudflare Turnstile spam protection and branded HTML email notifications delivered via the native Cloudflare Email Sending Workers binding. Flexible fields, configurable branding, submission storage.",
   "type": "module",
   "main": "dist/index.mjs",
