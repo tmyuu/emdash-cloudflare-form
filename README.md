@@ -26,7 +26,7 @@ form-submission endpoint and sends its own branded notifications.
 
 ## Requirements
 
-- EmDash **0.19.0+**, hosted on **Cloudflare Workers**.
+- EmDash **0.19.0+** (tested up to **0.27**), hosted on **Cloudflare Workers**.
 - A `send_email` binding in `wrangler.jsonc`:
   ```jsonc
   { "send_email": [{ "name": "EMAIL" }] }
