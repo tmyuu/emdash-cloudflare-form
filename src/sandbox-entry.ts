@@ -93,18 +93,30 @@ function parseFrom(input: string): FromAddress | null {
   return name ? { email, name } : { email };
 }
 
-/** Cloudflare Email Sending の宛先型。複数宛先はオブジェクト形式のみ受け付ける */
-type EmailAddress = { email: string; name?: string };
+/**
+ * Cloudflare Email Sending の宛先型。workers-types の EmailAddress は
+ * name が**必須**なので、表示名が無い場合はオブジェクトではなく
+ * プレーンな文字列（メールアドレスのみ）を渡すこと。
+ * {email} だけのオブジェクトを渡すと
+ * "Incorrect type for the 'name' field on 'EmailAddress'" で送信が失敗する。
+ */
+type EmailAddress = { email: string; name: string };
 type SendEmailBinding = {
   send(message: {
-    to: string | EmailAddress | EmailAddress[];
-    from: FromAddress | string;
-    replyTo?: string;
+    to: string | EmailAddress | (string | EmailAddress)[];
+    from: string | EmailAddress;
+    replyTo?: string | EmailAddress;
     subject: string;
     html?: string;
     text?: string;
   }): Promise<unknown>;
 };
+
+/** parseFrom の結果を binding が受け付ける形（文字列 or name 必須オブジェクト）に変換する */
+function toSendAddress(parsed: FromAddress, fallbackName?: string): string | EmailAddress {
+  const name = parsed.name ?? fallbackName?.trim();
+  return name ? { email: parsed.email, name } : parsed.email;
+}
 function getBinding(name: string): SendEmailBinding {
   const env = cfEnv as unknown as Record<string, unknown>;
   const binding = env[name] as SendEmailBinding | undefined;
@@ -194,10 +206,13 @@ function getHeader(req: SandboxedRequest, name: string): string | undefined {
 async function handleSubmit(routeCtx: SandboxedRouteContext, ctx: PluginContext) {
   const cfg = await loadConfig(ctx);
   const loc = getLocale(cfg.lang);
-  const from = parseFrom(cfg.from);
-  if (!cfg.turnstileSecret || !from || cfg.toEmails.length === 0) {
+  const parsedFrom = parseFrom(cfg.from);
+  if (!cfg.turnstileSecret || !parsedFrom || cfg.toEmails.length === 0) {
     return { ok: false, error: "not_configured" };
   }
+  // 表示名の無い From はオブジェクトではなく文字列で渡す（EmailAddress.name は必須のため）。
+  // 表示名はメール設定の From（`Name <addr>` 形式）→ orgName の順でフォールバック
+  const from = toSendAddress(parsedFrom, cfg.brand.orgName);
 
   const body = (routeCtx.input ?? {}) as Record<string, unknown>;
   const token = clip(body.token ?? body["cf-turnstile-response"], 4000);
@@ -254,9 +269,9 @@ async function handleSubmit(routeCtx: SandboxedRouteContext, ctx: PluginContext)
   try {
     const mail = renderEmail(cfg.template, { kind: "notify", lang: cfg.lang, brand: cfg.brand, pairs, message, submitterName, category });
     await binding.send({
-      // Email Sending binding は複数宛先を EmailAddress（{ email, name? }）配列で要求する。
-      // 文字列配列だと "Incorrect type for the 'name' field on 'EmailAddress'" で失敗する
-      to: cfg.toEmails.map((email) => ({ email })),
+      // 宛先は文字列（配列）が許容される。オブジェクトで渡す場合は name が必須になるため
+      // 表示名を持たない宛先はプレーンな文字列のまま渡す
+      to: cfg.toEmails,
       from,
       replyTo: submitterEmail || undefined,
       subject: subjectTokens(cfg.notifySubject),
