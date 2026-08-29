@@ -79,7 +79,10 @@ Deploy, then open **EmDash admin → Contact Form**:
 - **Notify recipients** — where submissions are sent (comma/newline separated).
 - **Turnstile site key + secret key** — a status line above the form shows
   whether the secret is currently configured (secret fields never display
-  their stored value).
+  their stored value). If the secret is left blank here, the plugin falls
+  back to the Worker's `TURNSTILE_SECRET_KEY` binding
+  (`wrangler secret put TURNSTILE_SECRET_KEY`), so a fresh deploy can accept
+  submissions before anyone has signed in to the admin.
 - **Auto-reply** toggle + subject.
 - **Fields** — JSON array of field definitions (defaults provided).
 - **Template** — which HTML design to use:

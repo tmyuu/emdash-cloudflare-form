@@ -551,6 +551,20 @@ async function getStr(ctx, key, def = "") {
 	const v = await ctx.kv.get(key);
 	return typeof v === "string" && v.length > 0 ? v : def;
 }
+/**
+* 管理画面の設定を優先し、無ければ Worker の env（wrangler secret）から読む。
+*
+* Turnstile のシークレットのような値は、管理画面から入れるより
+* `wrangler secret put` で置きたい場面がある。とくに初回デプロイ時点では
+* まだ管理者アカウントが無く、管理画面に入れないため設定できない。
+* env をフォールバックにしておくと、デプロイだけでフォームが動く。
+*/
+async function getSecret(ctx, key, envKey) {
+	const fromSettings = await getStr(ctx, key);
+	if (fromSettings) return fromSettings;
+	const v = env[envKey];
+	return typeof v === "string" ? v : "";
+}
 async function loadConfig(ctx) {
 	const lang = normalizeLang(await getStr(ctx, K.language, "en"));
 	const loc = getLocale(lang);
@@ -567,7 +581,7 @@ async function loadConfig(ctx) {
 		from: await getStr(ctx, K.fromAddress),
 		bindingName: await getStr(ctx, K.bindingName, DEFAULT_BINDING) || DEFAULT_BINDING,
 		toEmails: splitList(await getStr(ctx, K.toEmails)),
-		turnstileSecret: await getStr(ctx, K.turnstileSecret),
+		turnstileSecret: await getSecret(ctx, K.turnstileSecret, "TURNSTILE_SECRET_KEY"),
 		turnstileSiteKey: await getStr(ctx, K.turnstileSiteKey),
 		autoresponder: await getStr(ctx, K.autoresponder) === "1",
 		notifySubject: await getStr(ctx, K.notifySubject, loc.defaults.notifySubject),
