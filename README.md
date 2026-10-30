@@ -27,7 +27,7 @@ form-submission endpoint and sends its own branded notifications.
 
 ## Requirements
 
-- EmDash **0.19.0+** (tested up to **0.27**), hosted on **Cloudflare Workers**.
+- EmDash **0.19.0+** (see [Compatibility](#compatibility)), hosted on **Cloudflare Workers**.
 - A `send_email` binding in `wrangler.jsonc`:
   ```jsonc
   { "send_email": [{ "name": "EMAIL" }] }
@@ -36,6 +36,32 @@ form-submission endpoint and sends its own branded notifications.
   (`wrangler email sending enable yourdomain.com`).
 - A [Cloudflare Turnstile](https://developers.cloudflare.com/turnstile/) widget
   (site key + secret key).
+
+## Compatibility
+
+| Plugin | EmDash (`peerDependencies`) | Tested on |
+|---|---|---|
+| 0.7.x | `>=0.19.0 <2.0.0` | 0.27.0, 1.4.0 |
+| 0.6.x | `>=0.19.0` | 0.27.0 |
+
+The `<2.0.0` cap is deliberate: EmDash 2.x is untested, so a major bump on the
+host surfaces as a peer warning instead of a silent break.
+
+The Turnstile secret falls back to the Worker's `TURNSTILE_SECRET_KEY` binding
+when the admin setting is blank (since 0.6.2).
+
+### Upgrading the host to EmDash 1.x
+
+The plugin's API surface is unchanged between EmDash 0.27 and 1.x, so no
+plugin configuration changes are needed:
+
+1. Update `emdash` (and this plugin, to 0.7.0+) in the site.
+2. Keep the registration as-is — `plugins: [cloudflareForm()]`, not
+   `sandboxed:`.
+3. Run `emdash migrate` against the site's database before deploying, so the
+   host schema matches the new EmDash version.
+4. Deploy, then submit a test form and confirm the notification arrives.
+   Settings and stored submissions carry over.
 
 ## Install
 
