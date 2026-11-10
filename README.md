@@ -1,11 +1,11 @@
-# emdash-cloudflare-form
+# @livspect/emdash-cloudflare-form
 
 EmDash CMS plugin (standard format): a **contact / inquiry form backend** with
 **Cloudflare Turnstile** spam protection and **branded HTML email** notifications
 delivered through the native [Cloudflare Email Sending](https://developers.cloudflare.com/email-service/)
 Workers binding — **no API token, no SMTP, no external SaaS.**
 
-Companion to [`emdash-cloudflare-email`](https://github.com/tmyuu/emdash-cloudflare-email):
+Companion to [`@livspect/emdash-cloudflare-email`](https://github.com/tmyuu/emdash-cloudflare-email):
 that plugin delivers EmDash's own system email; this one owns a public
 form-submission endpoint and sends its own branded notifications.
 
@@ -41,7 +41,8 @@ form-submission endpoint and sends its own branded notifications.
 
 | Plugin | EmDash (`peerDependencies`) | Tested on |
 |---|---|---|
-| 0.7.x | `>=0.19.0 <2.0.0` | 0.27.0, 1.4.0 |
+| 0.8.x | `>=0.19.0 <2.0.0` | 0.27.0, 1.4.0 (published on npm as `@livspect/emdash-cloudflare-form`) |
+| 0.7.x | `>=0.19.0 <2.0.0` | 0.27.0, 1.4.0 (GitHub install only) |
 | 0.6.x | `>=0.19.0` | 0.27.0 |
 
 The `<2.0.0` cap is deliberate: EmDash 2.x is untested, so a major bump on the
@@ -66,9 +67,24 @@ plugin configuration changes are needed:
 ## Install
 
 ```sh
-pnpm add github:tmyuu/emdash-cloudflare-form
-# (after npm publish: pnpm add emdash-cloudflare-form)
+pnpm add @livspect/emdash-cloudflare-form
+# or: npm i @livspect/emdash-cloudflare-form
 ```
+
+### Migrating from a GitHub install (0.7.x and earlier)
+
+Up to 0.7.x the plugin was installed straight from GitHub under the unscoped
+name `emdash-cloudflare-form`. From 0.8.0 it is published on npm as `@livspect/emdash-cloudflare-form`, and
+the plugin locates its sandbox entry by that name, so update every reference:
+
+1. `package.json`: replace the `"emdash-cloudflare-form": "github:tmyuu/emdash-cloudflare-form#v…"`
+   dependency with `"@livspect/emdash-cloudflare-form": "^0.8.0"`. If the package is listed under
+   `pnpm.onlyBuiltDependencies`, remove it — the npm tarball ships a built `dist/`.
+2. `astro.config.mjs`: import from `@livspect/emdash-cloudflare-form`, and rename any Vite
+   `optimizeDeps.include` / `ssr.noExternal` entries to `@livspect/emdash-cloudflare-form` and
+   `@livspect/emdash-cloudflare-form/sandbox`.
+3. Reinstall and build. Settings and stored data carry over: they are keyed by
+   the plugin id (`cf-form`), which has not changed.
 
 ## Setup
 
@@ -76,7 +92,7 @@ pnpm add github:tmyuu/emdash-cloudflare-form
 
 ```js
 import emdash from "emdash/astro";
-import cloudflareForm from "emdash-cloudflare-form";
+import cloudflareForm from "@livspect/emdash-cloudflare-form";
 
 export default defineConfig({
   integrations: [
@@ -193,6 +209,15 @@ Minimal example:
    auto-reply (best-effort) via `env.EMAIL.send`.
 2. Email HTML/text is rendered by the selected template in `src/templates.ts`.
 3. Settings live in the plugin KV; submissions in plugin storage.
+
+## Releasing
+
+1. Bump `version` in `package.json` and in the descriptor in `src/index.ts`.
+2. Rebuild and commit `dist/` (`npm run build`); it stays committed so GitHub
+   installs keep working.
+3. Merge to `main`, then push a `vX.Y.Z` tag. The `Publish to npm` workflow
+   checks the tag against `package.json`, rebuilds, verifies `dist/` and
+   publishes with npm trusted publishing.
 
 ## License
 
