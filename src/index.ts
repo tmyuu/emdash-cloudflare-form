@@ -16,7 +16,7 @@
  * Register it in `astro.config.mjs`:
  *
  *   import emdash from 'emdash/astro';
- *   import cloudflareForm from 'emdash-cloudflare-form';
+ *   import cloudflareForm from '@livspect/emdash-cloudflare-form';
  *
  *   export default defineConfig({
  *     integrations: [
@@ -43,9 +43,9 @@ import type { PluginDescriptor } from "emdash";
 export function cloudflareForm(): PluginDescriptor {
   return {
     id: "cf-form",
-    version: "0.7.0",
+    version: "0.8.0",
     format: "standard",
-    entrypoint: "emdash-cloudflare-form/sandbox",
+    entrypoint: "@livspect/emdash-cloudflare-form/sandbox",
     adminPages: [
       { path: "/settings", label: "Contact Form", icon: "mail" },
       { path: "/submissions", label: "Form Submissions", icon: "inbox" },

@@ -2,9 +2,9 @@
 function cloudflareForm() {
 	return {
 		id: "cf-form",
-		version: "0.7.0",
+		version: "0.8.0",
 		format: "standard",
-		entrypoint: "emdash-cloudflare-form/sandbox",
+		entrypoint: "@livspect/emdash-cloudflare-form/sandbox",
 		adminPages: [{
 			path: "/settings",
 			label: "Contact Form",
