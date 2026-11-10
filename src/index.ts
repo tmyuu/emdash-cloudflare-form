@@ -43,7 +43,7 @@ import type { PluginDescriptor } from "emdash";
 export function cloudflareForm(): PluginDescriptor {
   return {
     id: "cf-form",
-    version: "0.8.0",
+    version: "1.0.0",
     format: "standard",
     entrypoint: "@livspect/emdash-cloudflare-form/sandbox",
     adminPages: [
