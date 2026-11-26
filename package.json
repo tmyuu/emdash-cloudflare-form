@@ -25,7 +25,8 @@
     "dev": "tsdown src/index.ts src/sandbox-entry.ts --format esm --dts --watch",
     "typecheck": "tsc --noEmit",
     "prepare": "tsdown src/index.ts src/sandbox-entry.ts --format esm --dts --clean",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build",
+    "test": "vitest run"
   },
   "keywords": [
     "emdash",
@@ -55,7 +56,8 @@
     "@cloudflare/workers-types": "^4.20260424.1",
     "emdash": "^1.4.0",
     "tsdown": "^0.21.7",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "vitest": "^3.2.4"
   },
   "publishConfig": {
     "access": "public"

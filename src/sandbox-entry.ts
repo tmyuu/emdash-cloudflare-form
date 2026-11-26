@@ -87,7 +87,8 @@ function splitList(s: string): string[] {
     .filter((x) => EMAIL_RE.test(x));
 }
 type FromAddress = { email: string; name?: string };
-function parseFrom(input: string): FromAddress | null {
+/** `addr` または `Name <addr>` を解釈する（テスト用に export） */
+export function parseFrom(input: string): FromAddress | null {
   const m = input.match(/^\s*(?:(.+?)\s*<\s*([^>]+?)\s*>|([^\s<>]+))\s*$/);
   if (!m) return null;
   const email = (m[2] ?? m[3] ?? "").trim();
@@ -115,8 +116,8 @@ type SendEmailBinding = {
   }): Promise<unknown>;
 };
 
-/** parseFrom の結果を binding が受け付ける形（文字列 or name 必須オブジェクト）に変換する */
-function toSendAddress(parsed: FromAddress, fallbackName?: string): string | EmailAddress {
+/** parseFrom の結果を binding が受け付ける形（文字列 or name 必須オブジェクト）に変換する（テスト用に export） */
+export function toSendAddress(parsed: FromAddress, fallbackName?: string): string | EmailAddress {
   const name = parsed.name ?? fallbackName?.trim();
   return name ? { email: parsed.email, name } : parsed.email;
 }
