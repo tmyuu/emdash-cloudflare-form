@@ -523,6 +523,7 @@ function clip(v, max) {
 function splitList(s) {
 	return s.split(/[\n,]/).map((x) => x.trim()).filter((x) => EMAIL_RE.test(x));
 }
+/** `addr` または `Name <addr>` を解釈する（テスト用に export） */
 function parseFrom(input) {
 	const m = input.match(/^\s*(?:(.+?)\s*<\s*([^>]+?)\s*>|([^\s<>]+))\s*$/);
 	if (!m) return null;
@@ -534,7 +535,7 @@ function parseFrom(input) {
 		name
 	} : { email };
 }
-/** parseFrom の結果を binding が受け付ける形（文字列 or name 必須オブジェクト）に変換する */
+/** parseFrom の結果を binding が受け付ける形（文字列 or name 必須オブジェクト）に変換する（テスト用に export） */
 function toSendAddress(parsed, fallbackName) {
 	const name = parsed.name ?? fallbackName?.trim();
 	return name ? {
@@ -1067,4 +1068,4 @@ var sandbox_entry_default = { routes: {
 	admin: { handler: handleAdmin }
 } };
 //#endregion
-export { sandbox_entry_default as default };
+export { sandbox_entry_default as default, parseFrom, toSendAddress };

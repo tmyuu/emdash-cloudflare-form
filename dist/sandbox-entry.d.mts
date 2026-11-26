@@ -25,6 +25,25 @@ interface FieldDef {
 }
 //#endregion
 //#region src/sandbox-entry.d.ts
+type FromAddress = {
+  email: string;
+  name?: string;
+};
+/** `addr` または `Name <addr>` を解釈する（テスト用に export） */
+declare function parseFrom(input: string): FromAddress | null;
+/**
+ * Cloudflare Email Sending の宛先型。workers-types の EmailAddress は
+ * name が**必須**なので、表示名が無い場合はオブジェクトではなく
+ * プレーンな文字列（メールアドレスのみ）を渡すこと。
+ * {email} だけのオブジェクトを渡すと
+ * "Incorrect type for the 'name' field on 'EmailAddress'" で送信が失敗する。
+ */
+type EmailAddress = {
+  email: string;
+  name: string;
+};
+/** parseFrom の結果を binding が受け付ける形（文字列 or name 必須オブジェクト）に変換する（テスト用に export） */
+declare function toSendAddress(parsed: FromAddress, fallbackName?: string): string | EmailAddress;
 declare function handleSubmit(routeCtx: SandboxedRouteContext, ctx: PluginContext): Promise<{
   ok: boolean;
   error: string;
@@ -172,4 +191,4 @@ declare const _default: {
   };
 };
 //#endregion
-export { _default as default };
+export { _default as default, parseFrom, toSendAddress };
